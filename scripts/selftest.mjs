@@ -83,7 +83,20 @@ assert(Math.abs(sump.fh.proposed - 5 * 1.15) < 1e-9, 'Sump: static 5 m × 1.15 F
 assert(tps.sheet.sections.every((sec) => sec.type !== 'steps' || sec.steps.every((st) => st.ref)), 'every calculation step has a reference');
 import { EXAMPLE_SCHEDULE } from '../src/lib/pdf/schedulePdf.js';
 const schedule = { title: 'PUMP SCHEDULE', subtitle: 'FRANKLIN ELECTRIC PUMPS — WATER SUPPLY', rows: EXAMPLE_SCHEDULE() };
-const res = await compileSubmittal({ project, entries, duties, files, logo, schedule }, () => {});
+import { newLiterature, fillText } from '../src/lib/literature.js';
+import { buildLiteraturePdf } from '../src/lib/pdf/literaturePdf.js';
+const lits = ['transfer', 'booster-vfd', 'booster-fixed', 'circulation', 'sump'].map((t) => newLiterature(t, { model: 'TEST-MODEL', reqFlow: '1', reqHead: '20', propFlow: '1.1', propHead: '22' }));
+assert(fillText(lits[0].logic.split('\n')[0], lits[0]).includes('2 Nos. of Franklin Electric TEST-MODEL Horizontal Multistage pump') && fillText('{configText}', lits[1]) === '1 Duty + 1 Standby + 1 Assist', 'literature placeholders filled');
+for (const l of lits) {
+  const r = await buildLiteraturePdf(l, project, { logo, attachments: [{ name: 'Datasheet.pdf', bytes: await sample('Datasheet', [595.28, 841.89], 0, 1) }] });
+  writeFileSync(`${out}/literature-${l.template}.pdf`, r.bytes);
+  assert((await PDFDocument.load(r.bytes)).getPageCount() >= 3, `literature PDF ${l.template} (+ datasheet)`);
+}
+files[`lit-${lits[1].id}-datasheet`] = [{ name: 'Booster datasheet.pdf', bytes: await sample('Booster datasheet', [595.28, 841.89], 0, 2) }];
+files[`lit-${lits[1].id}-drawing`] = [{ name: 'Skid layout.pdf', bytes: await sample('Skid layout', [841.89, 595.28], 0, 1) }];
+const res = await compileSubmittal({ project, entries, duties, files, logo, schedule, literature: lits }, () => {});
+const boosterSec = res.toc.find((t) => t.title.includes('– BOOSTER PUMP SET') && !t.title.includes('BASEMENT'));
+assert(boosterSec.items[0].label.startsWith('Technical Literature') && boosterSec.items.some((i) => i.label.startsWith('Pump Datasheet')) && boosterSec.items.at(-2).label.startsWith('Drawing'), 'booster section order: literature → datasheet → calc → drawing');
 writeFileSync(`${out}/submittal.pdf`, res.bytes);
 assert(res.pageCount > 20, `compiled submittal: ${res.pageCount} pages`);
 assert(res.toc.length === 14, 'TOC has 14 sections');

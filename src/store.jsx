@@ -4,6 +4,7 @@ import { DEFAULT_INDEX, DEFAULT_PROJECT } from './lib/submittalDefaults.js';
 import { fileStore } from './lib/fileStore.js';
 import { BRAND, brandLogoBytes } from './brand.js';
 import { emptyScheduleRow } from './lib/pdf/schedulePdf.js';
+import { newLiterature } from './lib/literature.js';
 
 const Ctx = createContext(null);
 const KEY = 'pump-submittal-v2';
@@ -51,17 +52,18 @@ export function StoreProvider({ children }) {
   const [inputs, setInputs] = useState(() => mergeInputs(saved?.inputs));
   const [schedule, setSchedule] = useState(() => ({ ...DEFAULT_SCHEDULE(), ...(saved?.schedule || {}) }));
   const [theme, setThemeState] = useState(() => saved?.theme || 'light');
+  const [literature, setLiterature] = useState(() => saved?.literature || []);
   const [files, setFiles] = useState({}); // entryId -> [{id,name,size,pages,bytes}]
   const [logo, setLogo] = useState(saved?.logo || null); // {dataUrl,type,name}
   const [toast, setToast] = useState(null);
 
   useEffect(() => {
     try {
-      localStorage.setItem(KEY, JSON.stringify({ project, entries, duties, inputs, logo, schedule, theme }));
+      localStorage.setItem(KEY, JSON.stringify({ project, entries, duties, inputs, logo, schedule, theme, literature }));
     } catch {
       /* quota – ignore */
     }
-  }, [project, entries, duties, inputs, logo, schedule, theme]);
+  }, [project, entries, duties, inputs, logo, schedule, theme, literature]);
 
   useEffect(() => {
     fileStore.all().then((recs) => {
@@ -132,6 +134,7 @@ export function StoreProvider({ children }) {
     setFiles({});
     setLogo(null);
     setSchedule(DEFAULT_SCHEDULE());
+    setLiterature([]);
     await fileStore.clear();
   }, []);
 
@@ -172,7 +175,22 @@ export function StoreProvider({ children }) {
     return fresh.length;
   }, [duties, schedule]);
 
+  const addLiterature = useCallback((template, o) => {
+    const lit = newLiterature(template, o);
+    setLiterature((l) => [...l, lit]);
+    return lit.id;
+  }, []);
+  const updateLiterature = useCallback((id, patch) => setLiterature((l) => l.map((x) => (x.id === id ? { ...x, ...patch } : x))), []);
+  const removeLiterature = useCallback(
+    async (id) => {
+      for (const slot of [`lit-${id}-datasheet`, `lit-${id}-drawing`]) for (const f of files[slot] || []) await removeFile(slot, f.id);
+      setLiterature((l) => l.filter((x) => x.id !== id));
+    },
+    [files, removeFile],
+  );
+
   const value = {
+    literature, setLiterature, addLiterature, updateLiterature, removeLiterature,
     getLogo, logoSrc, schedule, setSchedule, importDutiesToSchedule, theme, setTheme,
     project, setProject, entries, setEntries, duties, setDuties, inputs, setCalcInputs, saveDuty,
     files, addFiles, removeFile, moveFile, logo, setLogo, toast, notify, resetAll, uid,
