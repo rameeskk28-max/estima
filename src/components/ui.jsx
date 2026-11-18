@@ -117,7 +117,7 @@ export function Kpi({ label, value, unit, sub, tone }) {
     <div className={`rounded-lg border p-3 ${toneCls}`}>
       <div className="text-[11px] font-medium uppercase tracking-wide text-slate-400">{label}</div>
       <div className="mt-1 flex items-baseline gap-1">
-        <span className="text-2xl font-semibold tabular-nums text-white">{value}</span>
+        <span className="text-2xl font-semibold tabular-nums text-slate-50">{value}</span>
         <span className="text-sm text-brand-300">{unit}</span>
       </div>
       {sub && <div className="mt-0.5 text-xs text-slate-400">{sub}</div>}
@@ -152,7 +152,7 @@ export function Modal({ open, onClose, title, children, wide, footer }) {
     <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/70 p-2 backdrop-blur-sm sm:p-6" role="dialog" aria-modal="true" aria-labelledby={id}>
       <div className={`flex w-full flex-col overflow-hidden rounded-xl border border-line bg-ink-900 ${wide ? 'max-w-[980px]' : 'max-w-xl'}`}>
         <header className="no-print flex items-center justify-between border-b border-line px-4 py-3">
-          <h2 id={id} className="text-sm font-semibold text-white">
+          <h2 id={id} className="text-sm font-semibold text-slate-50">
             {title}
           </h2>
           <div className="flex items-center gap-2">

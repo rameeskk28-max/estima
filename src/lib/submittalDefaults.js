@@ -18,6 +18,7 @@ export const DEFAULT_INDEX = () => [
 
 export const DEFAULT_PROJECT = () => ({
   projectName: '',
+  client: '',
   consultant: '',
   contractor: '',
   refNo: '',

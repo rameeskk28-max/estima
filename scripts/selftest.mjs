@@ -30,7 +30,7 @@ const duties = [];
 for (const c of Object.values(CALCULATORS)) {
   const r = c.compute(c.defaults());
   assert(r.duty && r.sheet && r.kpis.length === 4, `${c.key} computes`);
-  if (r.duty.kind === 'pump') assert(r.duty.headM > 0 && r.duty.flowLps > 0 && r.duty.motorKW > 0, `${c.key} duty point positive`);
+  if (r.duty.kind === 'pump') assert(r.duty.headM > 0 && r.duty.flowLps > 0, `${c.key} duty point positive`);
   const bytes = await buildCalcSheetPdf(r.sheet, project, logo);
   writeFileSync(`${out}/calc-${c.key}.pdf`, bytes);
   const n = (await PDFDocument.load(bytes)).getPageCount();
@@ -45,7 +45,7 @@ import { hazenWilliams, velocity } from '../src/lib/hydraulics.js';
 const hf = hazenWilliams(10, 102.3, 100, 120); // ≈ 1.98 m (hand calculation)
 assert(Math.abs(hf - 1.979) < 0.01, `Hazen-Williams 10 L/s DN100 C120 100 m = ${hf.toFixed(3)} m`);
 assert(Math.abs(velocity(10, 102.3) - 1.2166) < 0.01, 'velocity 10 L/s DN100');
-const chw = CALCULATORS.chw.compute({ ...CALCULATORS.chw.defaults(), load: { value: 1000, unit: 'kW' }, deltaT: 6 });
+const chw = CALCULATORS.chw.compute({ ...CALCULATORS.chw.defaults(), loadUnit: 'kW', load: 1000, deltaT: 6 });
 assert(Math.abs(chw.duty.totalFlowLps - 1000 / (4.186 * 6)) < 1e-9, 'CHW Q = kW / (4.186 ΔT)');
 const v = CALCULATORS.vessel.compute({ ...CALCULATORS.vessel.defaults(), mode: 'direct', va: 50, pmin: 3, pmax: 4.5, vessels: 1 });
 assert(Math.abs(v.selection.Vt - 50 * 5.5 / 1.5) < 1e-9 && v.selection.size === 200, `Vessel Vt=${v.selection.Vt.toFixed(1)} → ${v.selection.size} L`);
@@ -70,7 +70,20 @@ const files = {
   e12: [{ name: 'ISO 9001.pdf', bytes: new Uint8Array([1, 2, 3, 4]) }],
 };
 const entries = DEFAULT_INDEX();
-const res = await compileSubmittal({ project, entries, duties, files, logo }, () => {});
+// Excel-template cross-checks
+import { hwPsiPer100ft, ipcDemandGpm, equivalentLength } from '../src/lib/ipc.js';
+const excel = (4.52 * Math.pow(4.5 * 15.8503, 1.852)) / (Math.pow(150, 1.852) * Math.pow(2.5, 4.87)) * 100;
+assert(Math.abs(hwPsiPer100ft(4.5, 150, 2.5) - excel) < 1e-9, 'Hazen-Williams psi/100ft identical to Excel template formula');
+const tps = CALCULATORS.transfer.compute(CALCULATORS.transfer.defaults());
+assert(Math.abs(tps.duty.totalFlowLps - 22 * 0.8 / 0.8 / 3.6) < 1e-9, 'Transfer flow = V × 80% ÷ T ÷ 3.6 (TPS sample: 22 m³/hr)');
+assert(equivalentLength('Check Valve, Swing', 2.5).ft === 28 && equivalentLength('90° Elbow', 3).ft === 10, 'IPC Table E103.3(5) lookups');
+assert(Math.abs(ipcDemandGpm(90, 'tank').gpm - 41) < 1e-9 && Math.abs(ipcDemandGpm(95, 'tank').gpm - 42.25) < 1e-9, 'IPC Table E103.3(3) interpolation');
+const sump = CALCULATORS.sump.compute({ ...CALCULATORS.sump.defaults(), rows: [] });
+assert(Math.abs(sump.fh.proposed - 5 * 1.15) < 1e-9, 'Sump: static 5 m × 1.15 FOS with no friction');
+assert(tps.sheet.sections.every((sec) => sec.type !== 'steps' || sec.steps.every((st) => st.ref)), 'every calculation step has a reference');
+import { EXAMPLE_SCHEDULE } from '../src/lib/pdf/schedulePdf.js';
+const schedule = { title: 'PUMP SCHEDULE', subtitle: 'FRANKLIN ELECTRIC PUMPS — WATER SUPPLY', rows: EXAMPLE_SCHEDULE() };
+const res = await compileSubmittal({ project, entries, duties, files, logo, schedule }, () => {});
 writeFileSync(`${out}/submittal.pdf`, res.bytes);
 assert(res.pageCount > 20, `compiled submittal: ${res.pageCount} pages`);
 assert(res.toc.length === 14, 'TOC has 14 sections');

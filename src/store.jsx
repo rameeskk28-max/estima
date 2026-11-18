@@ -3,9 +3,11 @@ import { CALCULATORS } from './lib/calcs/index.js';
 import { DEFAULT_INDEX, DEFAULT_PROJECT } from './lib/submittalDefaults.js';
 import { fileStore } from './lib/fileStore.js';
 import { BRAND, brandLogoBytes } from './brand.js';
+import { emptyScheduleRow } from './lib/pdf/schedulePdf.js';
 
 const Ctx = createContext(null);
-const KEY = 'pump-submittal-v1';
+const KEY = 'pump-submittal-v2';
+const OLD_KEY = 'pump-submittal-v1';
 
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
@@ -13,10 +15,30 @@ function loadState() {
   try {
     const raw = localStorage.getItem(KEY);
     if (raw) return JSON.parse(raw);
+    // v1 → v2: keep project header, index and logo; calculators changed format.
+    const old = localStorage.getItem(OLD_KEY);
+    if (old) {
+      const o = JSON.parse(old);
+      return { project: o.project, entries: o.entries, logo: o.logo };
+    }
   } catch {
     /* ignore */
   }
   return null;
+}
+
+const DEFAULT_SCHEDULE = () => ({ title: 'PUMP SCHEDULE', subtitle: 'WATER SUPPLY & DRAINAGE PUMPS', notes: '', rows: [] });
+
+/** Merge saved calculator inputs with defaults (drops inputs from an older format). */
+function mergeInputs(saved) {
+  const base = defaultInputs();
+  for (const [k, v] of Object.entries(saved || {})) {
+    if (!base[k] || !v) continue;
+    const needsRows = 'rows' in base[k];
+    if (needsRows && !Array.isArray(v.rows)) continue;
+    base[k] = { ...base[k], ...v };
+  }
+  return base;
 }
 
 const defaultInputs = () => Object.fromEntries(Object.values(CALCULATORS).map((c) => [c.key, c.defaults()]));
@@ -26,18 +48,20 @@ export function StoreProvider({ children }) {
   const [project, setProject] = useState(() => ({ ...DEFAULT_PROJECT(), ...(saved?.project || {}) }));
   const [entries, setEntries] = useState(() => saved?.entries || DEFAULT_INDEX());
   const [duties, setDuties] = useState(() => saved?.duties || []);
-  const [inputs, setInputs] = useState(() => ({ ...defaultInputs(), ...(saved?.inputs || {}) }));
+  const [inputs, setInputs] = useState(() => mergeInputs(saved?.inputs));
+  const [schedule, setSchedule] = useState(() => ({ ...DEFAULT_SCHEDULE(), ...(saved?.schedule || {}) }));
+  const [theme, setThemeState] = useState(() => saved?.theme || 'light');
   const [files, setFiles] = useState({}); // entryId -> [{id,name,size,pages,bytes}]
   const [logo, setLogo] = useState(saved?.logo || null); // {dataUrl,type,name}
   const [toast, setToast] = useState(null);
 
   useEffect(() => {
     try {
-      localStorage.setItem(KEY, JSON.stringify({ project, entries, duties, inputs, logo }));
+      localStorage.setItem(KEY, JSON.stringify({ project, entries, duties, inputs, logo, schedule, theme }));
     } catch {
       /* quota – ignore */
     }
-  }, [project, entries, duties, inputs, logo]);
+  }, [project, entries, duties, inputs, logo, schedule, theme]);
 
   useEffect(() => {
     fileStore.all().then((recs) => {
@@ -107,6 +131,7 @@ export function StoreProvider({ children }) {
     setInputs(defaultInputs());
     setFiles({});
     setLogo(null);
+    setSchedule(DEFAULT_SCHEDULE());
     await fileStore.clear();
   }, []);
 
@@ -122,8 +147,33 @@ export function StoreProvider({ children }) {
   }, [logo]);
   const logoSrc = logo?.dataUrl || BRAND.logoUrl;
 
+  const setTheme = useCallback((t) => setThemeState(t), []);
+  /** Add schedule rows for saved pump duties that are not yet in the manual schedule. */
+  const importDutiesToSchedule = useCallback(() => {
+    const have = new Set(schedule.rows.map((r) => r.tag).filter(Boolean));
+    const fresh = duties
+      .filter((d) => d.kind === 'pump' && !have.has(d.tag))
+      .map((d) => {
+        const spec = String(d.specifiedDuty || '').match(/([\d.]+)\s*L\/?P?S.*?@\s*([\d.]+)\s*(BAR|M)/i);
+        const specHead = spec ? (spec[3].toUpperCase() === 'BAR' ? (Number(spec[2]) * 10.197).toFixed(1) : spec[2]) : '';
+        return emptyScheduleRow({
+          tag: d.tag,
+          system: d.service,
+          config: d.arrangement,
+          specFlow: spec ? spec[1] : '',
+          specHead,
+          propFlow: d.flowLps != null ? d.flowLps.toFixed(2) : '',
+          propHead: d.headM != null ? d.headM.toFixed(1) : '',
+          brand: d.brand || '',
+          model: d.model || '',
+        });
+      });
+    if (fresh.length) setSchedule((sc) => ({ ...sc, rows: [...sc.rows, ...fresh] }));
+    return fresh.length;
+  }, [duties, schedule]);
+
   const value = {
-    getLogo, logoSrc,
+    getLogo, logoSrc, schedule, setSchedule, importDutiesToSchedule, theme, setTheme,
     project, setProject, entries, setEntries, duties, setDuties, inputs, setCalcInputs, saveDuty,
     files, addFiles, removeFile, moveFile, logo, setLogo, toast, notify, resetAll, uid,
   };

@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react';
-import { FileText, Save, RotateCcw, Download, LoaderCircle, Gauge, ClipboardList } from 'lucide-react';
+import { FileText, Save, RotateCcw, Download, LoaderCircle, Gauge, ClipboardList, Flag } from 'lucide-react';
 import { useStore } from '../../store.jsx';
 import { CALCULATORS, SECTION_CATEGORIES } from '../../lib/calcs/index.js';
-import { fmt, mToBar, mToKPa } from '../../lib/hydraulics.js';
+import { fmtN, M_PER_BAR } from '../../lib/ipc.js';
 import { buildCalcSheetPdf } from '../../lib/pdf/calcSheet.js';
 import { Card, Kpi, CheckList, NumField, TextField, SelectField, downloadBytes, safeName } from '../../components/ui.jsx';
 import { SheetPreviewModal } from '../../components/SheetPreview.jsx';
+import { PumpScene } from '../../components/PumpScene.jsx';
 
-export function CalcShell({ calcKey, icon, description, children }) {
+export function CalcShell({ calcKey, icon, description, children, pump = true }) {
   const { inputs, setCalcInputs, saveDuty, project, notify, duties, getLogo } = useStore();
   const calc = CALCULATORS[calcKey];
   const i = inputs[calcKey];
@@ -28,12 +29,12 @@ export function CalcShell({ calcKey, icon, description, children }) {
     if (!result) return;
     if (!String(i.tag).trim()) return notify('Enter an equipment tag first', 'bad');
     const replaced = saveDuty(calcKey, result);
-    notify(`${i.tag} ${replaced ? 'updated in' : 'added to'} pump schedule → ${SECTION_CATEGORIES[i.category]}`);
+    notify(`${i.tag} ${replaced ? 'updated in' : 'added to'} submittal → ${SECTION_CATEGORIES[i.category]}`);
   };
   const onPdf = async () => {
     setBusy(true);
     try {
-      downloadBytes(await buildCalcSheetPdf(result.sheet, project, await getLogo()), `${safeName(i.tag)}_Calculation_Sheet.pdf`);
+      downloadBytes(await buildCalcSheetPdf(result.sheet, project, await getLogo()), `${safeName(i.tag)}_Hydraulic_Calculation.pdf`);
     } finally {
       setBusy(false);
     }
@@ -44,13 +45,13 @@ export function CalcShell({ calcKey, icon, description, children }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="flex items-center gap-2 text-xl font-semibold text-white">
-            <Icon className="text-brand-400" size={22} /> {calc.label} Calculator
+          <h1 className="flex items-center gap-2 text-xl font-semibold text-slate-50">
+            <Icon className="text-brand-400" size={22} /> {calc.label}
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-slate-400">{description}</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button className="btn-ghost" onClick={() => setCalcInputs(calcKey, calc.defaults())} title="Restore example inputs">
+          <button className="btn-ghost" onClick={() => confirm('Restore the example inputs for this calculator?') && setCalcInputs(calcKey, calc.defaults())} title="Restore example inputs">
             <RotateCcw size={16} /> Reset
           </button>
           <button className="btn-secondary" onClick={onPdf} disabled={!result || busy}>
@@ -60,35 +61,37 @@ export function CalcShell({ calcKey, icon, description, children }) {
             <FileText size={16} /> Generate A4 Calculation Sheet
           </button>
           <button className="btn-success" onClick={onSave} disabled={!result}>
-            <Save size={16} /> {exists ? 'Update' : 'Save to'} Pump Schedule
+            <Save size={16} /> {exists ? 'Update' : 'Save to'} Submittal
           </button>
         </div>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="space-y-4">
-          <Card title="Equipment Identification" icon={ClipboardList}>
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_420px]">
+        <div className="min-w-0 space-y-4">
+          <Card title="1. Project / Design Information" icon={ClipboardList}>
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
               <TextField label="Equipment tag" value={i.tag} onChange={(v) => set({ tag: v })} />
-              <TextField label="Service / description" value={i.service} onChange={(v) => set({ service: v })} />
-              <SelectField label="Submittal section" value={i.category} onChange={(v) => set({ category: v })} options={Object.entries(SECTION_CATEGORIES).map(([value, label]) => ({ value, label }))} />
-              {'duty' in i ? (
+              <TextField label="System" value={i.system} onChange={(v) => set({ system: v })} className="col-span-2" />
+              <TextField label="Specified duty (consultant)" value={i.specifiedDuty} onChange={(v) => set({ specifiedDuty: v })} placeholder="e.g. 6.2 LPS @ 4 BAR" className="col-span-2 lg:col-span-1" />
+              {pump && (
                 <div className="grid grid-cols-2 gap-2">
                   <NumField label="Duty" value={i.duty} min={1} step={1} onChange={(v) => set({ duty: v })} />
                   <NumField label="Standby" value={i.standby} min={0} step={1} onChange={(v) => set({ standby: v })} />
                 </div>
-              ) : (
-                <div />
               )}
+              <SelectField label="Submittal section" value={i.category} onChange={(v) => set({ category: v })} options={Object.entries(SECTION_CATEGORIES).map(([value, label]) => ({ value, label }))} />
             </div>
+            <p className="mt-2 text-[11px] text-slate-500">Project, client and consultant are taken from the Submittal Builder → Project Header.</p>
           </Card>
           {children(i, set, result)}
+          {pump && result?.fh && <FinalHeadCard i={i} set={set} result={result} closedLoop={calcKey === 'chw'} />}
         </div>
 
-        <aside className="space-y-4 xl:sticky xl:top-4 xl:self-start">
-          <Card title="Results" icon={Gauge} actions={<span className="rounded bg-brand-500/15 px-2 py-0.5 text-[11px] font-medium text-brand-300">LIVE</span>}>
+        <aside className="order-first grid gap-4 lg:grid-cols-2 2xl:order-none 2xl:sticky 2xl:top-4 2xl:grid-cols-1 2xl:self-start">
+          <PumpScene type={calcKey} anim={result?.anim} className="self-start" />
+          <Card title="Results" icon={Gauge} actions={<span className="rounded bg-brand-500/15 px-2 py-0.5 text-[11px] font-semibold text-brand-300">LIVE</span>}>
             {!result ? (
-              <p className="text-sm text-red-300">Check inputs – calculation could not be completed.</p>
+              <p className="text-sm text-red-400">Check inputs – calculation could not be completed.</p>
             ) : (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-2.5">
@@ -96,23 +99,7 @@ export function CalcShell({ calcKey, icon, description, children }) {
                     <Kpi key={k.label} {...k} />
                   ))}
                 </div>
-                {result.duty.headM != null && (
-                  <div className="grid grid-cols-3 gap-2 rounded-lg bg-ink-950/60 p-2.5 text-center text-xs tabular-nums">
-                    <div>
-                      <div className="text-slate-500">Head</div>
-                      <div className="font-semibold text-white">{fmt(result.duty.headM, 2)} m</div>
-                    </div>
-                    <div>
-                      <div className="text-slate-500">Pressure</div>
-                      <div className="font-semibold text-white">{fmt(mToBar(result.duty.headM), 2)} bar</div>
-                    </div>
-                    <div>
-                      <div className="text-slate-500">Pressure</div>
-                      <div className="font-semibold text-white">{fmt(mToKPa(result.duty.headM), 1)} kPa</div>
-                    </div>
-                  </div>
-                )}
-                {result.breakdown?.length > 0 && <Breakdown items={result.breakdown} total={result.duty.headM} />}
+                {result.fh && <Breakdown fh={result.fh} hl={result.hl} />}
                 <CheckList checks={result.checks} />
               </div>
             )}
@@ -125,28 +112,57 @@ export function CalcShell({ calcKey, icon, description, children }) {
   );
 }
 
-function Breakdown({ items, total }) {
+function FinalHeadCard({ i, set, result, closedLoop }) {
+  const { fh } = result;
+  return (
+    <Card title="4. Final Head Calculation & Selected Pump" icon={Flag}>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        {!closedLoop && (
+          <>
+            <NumField label="End / residual pressure" unit="m" value={i.residual} onChange={(v) => set({ residual: v })} min={0} hint={`= ${fmtN((Number(i.residual) || 0) / M_PER_BAR, 2)} bar`} />
+            <NumField label="Static height" unit="m" value={i.staticHeight} onChange={(v) => set({ staticHeight: v })} />
+          </>
+        )}
+        <NumField label="Factor of safety" unit="%" value={i.fos} onChange={(v) => set({ fos: v })} min={0} />
+        <TextField label="Pump brand" value={i.pumpBrand} onChange={(v) => set({ pumpBrand: v })} placeholder="e.g. Franklin Electric" />
+        <TextField label="Pump model" value={i.pumpModel} onChange={(v) => set({ pumpModel: v })} placeholder="e.g. 15EVR0700" />
+        <TextField label="Remarks (printed below result)" value={i.remarks} onChange={(v) => set({ remarks: v })} className="col-span-2 md:col-span-3" />
+      </div>
+      <div className="mt-3 rounded-lg border border-brand-500/40 bg-brand-500/10 px-3 py-2 text-sm font-semibold text-brand-300">
+        Selected pump: {fmtN(result.duty.flowLps, 2)} L/s @ {fmtN(fh.proposed, 1)} m ({fmtN(fh.proposed / M_PER_BAR, 2)} bar) – {result.duty.arrangement}
+      </div>
+    </Card>
+  );
+}
+
+function Breakdown({ fh, hl }) {
+  const items = [
+    { label: 'Friction (pipes & fittings)', m: fh.frictionM },
+    ...fh.steps.filter((s) => /pressure drop|Other components|residual|Static height/i.test(s.calc) && s.unit === 'm').map((s) => ({ label: s.calc, m: Number(String(s.value).replace(/,/g, '')) || 0 })),
+    { label: 'Safety allowance', m: fh.allowance },
+  ];
   const max = Math.max(...items.map((x) => Math.abs(x.m)), 0.001);
   return (
     <div>
       <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-slate-400">Head build-up</div>
       <div className="space-y-1.5">
         {items.map((x) => (
-          <div key={x.label} className="grid grid-cols-[110px_1fr_56px] items-center gap-2 text-xs">
+          <div key={x.label} className="grid grid-cols-[120px_1fr_52px] items-center gap-2 text-xs">
             <span className="truncate text-slate-400" title={x.label}>
               {x.label}
             </span>
             <div className="h-2 rounded-full bg-ink-950">
-              <div className={`h-2 rounded-full ${x.m < 0 ? 'bg-amber-400/80' : 'bg-brand-500'}`} style={{ width: `${(Math.abs(x.m) / max) * 100}%` }} />
+              <div className="h-2 rounded-full bg-brand-500 transition-all duration-500" style={{ width: `${(Math.abs(x.m) / max) * 100}%` }} />
             </div>
-            <span className="text-right tabular-nums text-slate-200">{fmt(x.m, 2)}</span>
+            <span className="text-right tabular-nums text-slate-200">{fmtN(x.m, 2)}</span>
           </div>
         ))}
-        <div className="grid grid-cols-[110px_1fr_56px] gap-2 border-t border-line pt-1.5 text-xs font-semibold">
-          <span className="text-slate-200">Total</span>
+        <div className="grid grid-cols-[120px_1fr_52px] gap-2 border-t border-line pt-1.5 text-xs font-semibold">
+          <span className="text-slate-200">Total proposed</span>
           <span />
-          <span className="text-right tabular-nums text-brand-300">{fmt(total, 2)} m</span>
+          <span className="text-right tabular-nums text-brand-300">{fmtN(fh.proposed, 2)} m</span>
         </div>
+        {hl && <div className="pt-1 text-[11px] text-slate-500">{hl.rows.length} head-loss items · total {fmtN(hl.totalBar, 3)} bar</div>}
       </div>
     </div>
   );

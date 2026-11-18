@@ -15,7 +15,7 @@ export function SubmittalBuilder() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="flex items-center gap-2 text-xl font-semibold text-white">
+        <h1 className="flex items-center gap-2 text-xl font-semibold text-slate-50">
           <Package className="text-brand-400" size={22} /> Submittal Package Builder
         </h1>
         <p className="mt-1 max-w-3xl text-sm text-slate-400">
@@ -50,7 +50,8 @@ function ProjectHeader() {
     <Card title="Project Header" icon={Building2}>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <TextField label="Project name" value={project.projectName} onChange={set('projectName')} placeholder="e.g. G+12 Residential Tower, Plot 345" className="lg:col-span-2" />
-        <TextField label="Consultant / Client" value={project.consultant} onChange={set('consultant')} />
+        <TextField label="Client" value={project.client} onChange={set('client')} />
+        <TextField label="Consultant" value={project.consultant} onChange={set('consultant')} />
         <TextField label="MEP contractor" value={project.contractor} onChange={set('contractor')} />
         <TextField label="Submittal reference no." value={project.refNo} onChange={set('refNo')} placeholder="e.g. MEP-SUB-PL-015" />
         <TextField label="Revision" value={project.revision} onChange={set('revision')} />
@@ -171,7 +172,7 @@ function PumpSchedule() {
 const KIND_LABEL = { upload: 'Documents', schedule: 'Pump schedule', technical: 'Technical literature' };
 
 function IndexManager() {
-  const { entries, setEntries, files, duties, uid, removeFile } = useStore();
+  const { entries, setEntries, files, duties, uid, removeFile, schedule } = useStore();
   const update = (id, patch) => setEntries((l) => l.map((e) => (e.id === id ? { ...e, ...patch } : e)));
   const move = (idx, dir) =>
     setEntries((l) => {
@@ -251,7 +252,7 @@ function IndexManager() {
             {e.include !== false && (
               <div className="mt-2.5 space-y-1.5 pl-11">
                 {e.kind === 'schedule' && (
-                  <AutoItem icon={Table} text={`Auto-generated pump & vessel schedule (${duties.length} saved dut${duties.length === 1 ? 'y' : 'ies'})`} />
+                  <AutoItem icon={Table} text={schedule.rows.length ? `Pump Schedule tab – ${schedule.rows.length} pump(s), SOM format` : `Auto-generated from ${duties.length} saved dut${duties.length === 1 ? 'y' : 'ies'} (fill the Pump Schedule tab for the full SOM format)`} />
                 )}
                 {e.kind === 'technical' &&
                   (calcDuties.length ? (
@@ -365,7 +366,7 @@ function FileSlot({ entry }) {
 
 /* ------------------------------------------------------------------ */
 function CompilePanel() {
-  const { project, entries, duties, files, notify, getLogo } = useStore();
+  const { project, entries, duties, files, notify, getLogo, schedule } = useStore();
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState('');
   const [result, setResult] = useState(null);
@@ -386,7 +387,7 @@ function CompilePanel() {
     setResult(null);
     try {
       const res = await compileSubmittal(
-        { project, entries, duties, files, logo: await getLogo() },
+        { project, entries, duties, files, logo: await getLogo(), schedule },
         setProgress,
       );
       const name = `${safeName(project.refNo || 'Submittal')}_Rev${safeName(project.revision || '0')}_${safeName(project.projectName || 'Project')}.pdf`;
@@ -477,7 +478,7 @@ function CompilePanel() {
 
 const Stat = ({ label, value }) => (
   <div className="rounded-lg border border-line bg-ink-900/60 p-2">
-    <div className="text-xl font-semibold tabular-nums text-white">{value}</div>
+    <div className="text-xl font-semibold tabular-nums text-slate-50">{value}</div>
     <div className="text-[10px] uppercase tracking-wide text-slate-400">{label}</div>
   </div>
 );

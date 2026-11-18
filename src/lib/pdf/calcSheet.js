@@ -2,23 +2,45 @@ import { PDFDocument } from 'pdf-lib';
 import { A4, C, loadFonts, wrap, drawText, rect, hline, vline, clean, fmtDate } from './theme.js';
 
 const [PW, PH] = A4;
-const L = 36;
-const R = PW - 36;
+const L = 30;
+const R = PW - 30;
 const W = R - L;
-const TOP = PH - 30;
-const HEADER_H = 80;
-const CONTENT_TOP = TOP - HEADER_H - 12;
-const CONTENT_BOTTOM = 62;
+const TOP = PH - 26;
+const HEADER_H = 64;
+const CONTENT_TOP = TOP - HEADER_H - 10;
+const CONTENT_BOTTOM = 50;
+
+/** Replace "@field" placeholders with project header values. */
+export const resolve = (v, project = {}) => (typeof v === 'string' && v.startsWith('@') ? project[v.slice(1)] || '–' : v);
+
+/** Normalise any section into { columns, rows } for the table writer. */
+export function sectionTable(sec, project) {
+  if (sec.type === 'info') {
+    return {
+      columns: [
+        { label: '', w: 0.28 },
+        { label: '', w: 0.72 },
+      ],
+      noHead: true,
+      rows: sec.rows.map(([k, v]) => ({ c: [k, resolve(v, project)], keyCol: true })),
+    };
+  }
+  if (sec.type === 'steps') {
+    return {
+      columns: sec.columns,
+      rows: sec.steps.map((s) => ({ c: [String(s.n), s.calc, s.formula, s.value, s.unit, s.ref], bold: s.bold, refCol: 5, valCol: 3 })),
+    };
+  }
+  return { columns: sec.columns, rows: sec.rows };
+}
 
 /**
- * Appends an A4 engineering calculation sheet to `doc`.
- * @returns {Promise<{pages: import('pdf-lib').PDFPage[]}>}
+ * Appends an A4 calculation sheet to `doc` (Greenland calculation format).
  */
 export async function renderCalcSheet(doc, fonts, sheet, project = {}, logoImg = null) {
   const pages = [];
   let page;
   let y;
-
   const newPage = () => {
     page = doc.addPage(A4);
     pages.push(page);
@@ -31,223 +53,182 @@ export async function renderCalcSheet(doc, fonts, sheet, project = {}, logoImg =
     }
     return false;
   };
-
   newPage();
 
   const sectionTitle = (title) => {
-    ensure(40);
-    y -= 4;
-    rect(page, L, y - 16, W, 16, { fill: C.light2 });
-    rect(page, L, y - 16, 3, 16, { fill: C.blue });
-    drawText(page, title, { x: L + 9, y: y - 11.5, size: 9.5, font: fonts.bold, color: C.navy });
-    y -= 22;
+    ensure(44);
+    y -= 2;
+    rect(page, L, y - 13.5, W, 13.5, { fill: C.navy });
+    drawText(page, title, { x: L + 6, y: y - 9.8, size: 8, font: fonts.bold, color: C.white, maxWidth: W - 12 });
+    y -= 13.5;
   };
 
   const table = (sec) => {
-    sectionTitle(sec.title);
-    const cols = sec.columns;
-    const widths = (sec.widths || (cols.length === 3 ? [0.58, 0.24, 0.18] : cols.map(() => 1 / cols.length))).map((f) => f * W);
-    const size = 8.2;
-    const pad = 4;
-    const lineH = size * 1.25;
+    const t = sectionTable(sec, project);
+    const widths = t.columns.map((c) => c.w * W);
+    const dense = t.columns.length > 8;
+    const size = dense ? 6.4 : 7;
+    const lh = size * 1.2;
+    const pad = dense ? 2.4 : 2.8;
     const drawHead = () => {
-      const h = lineH + pad * 2;
-      rect(page, L, y - h, W, h, { fill: C.navy });
+      if (t.noHead) return;
+      const lines = t.columns.map((c, k) => wrap(fonts.bold, c.label, size - 0.2, widths[k] - pad * 2));
+      const h = Math.max(...lines.map((l) => l.length)) * lh + pad * 2;
+      rect(page, L, y - h, W, h, { fill: C.light2 });
       let x = L;
-      cols.forEach((c, k) => {
-        drawText(page, c, { x: x + pad, y: y - pad - size + 1, size, font: fonts.bold, color: C.white, maxWidth: widths[k] - pad * 2 });
+      lines.forEach((ls, k) => {
+        ls.forEach((ln, li) => {
+          const cx = t.columns[k].align === 'c' ? x + widths[k] / 2 : x + pad;
+          drawText(page, ln, { x: cx, y: y - pad - size + 1 - li * lh, size: size - 0.2, font: fonts.bold, color: C.navy, align: t.columns[k].align === 'c' ? 'center' : 'left' });
+        });
+        vline(page, x, y, y - h, C.border, 0.5);
         x += widths[k];
       });
+      vline(page, R, y, y - h, C.border, 0.5);
+      hline(page, L, R, y - h, C.border, 0.6);
+      hline(page, L, R, y, C.border, 0.6);
       y -= h;
     };
-    ensure(lineH * 3 + pad * 4);
+    ensure(lh * 3 + pad * 4);
     drawHead();
-    sec.rows.forEach((row, ri) => {
-      const isTotal = /^TOTAL/.test(String(row[0]));
-      const font = isTotal ? fonts.bold : fonts.reg;
-      const cells = row.map((cell, k) => wrap(font, cell, size, widths[k] - pad * 2));
-      const h = Math.max(...cells.map((c) => c.length)) * lineH + pad * 2 - 2;
+    t.rows.forEach((r) => {
+      const fontFor = (k) => (r.bold || (r.keyCol && k === 0) || (r.valCol === k) ? fonts.bold : r.refCol === k ? fonts.ital : fonts.reg);
+      const cells = r.c.map((cell, k) => wrap(fontFor(k), cell ?? '', size, widths[k] - pad * 2));
+      const h = Math.max(...cells.map((c) => c.length)) * lh + pad * 2 - 1;
       if (ensure(h)) drawHead();
-      if (ri % 2 === 1 || isTotal) rect(page, L, y - h, W, h, { fill: isTotal ? C.light2 : C.light });
+      if (r.bold) rect(page, L, y - h, W, h, { fill: C.greenBg });
+      else if (r.keyCol) rect(page, L, y - h, widths[0], h, { fill: C.light });
       let x = L;
       cells.forEach((lines, k) => {
+        const flagged = r.flag === k;
+        if (flagged) rect(page, x + 0.5, y - h + 0.5, widths[k] - 1, h - 1, { fill: C.redBg });
         lines.forEach((ln, li) => {
-          const bold = k === 1 && cols.length === 3 && sec.title.startsWith('1.');
-          drawText(page, ln, { x: x + pad, y: y - pad - size + 1 - li * lineH, size, font: bold ? fonts.bold : font, color: C.text });
+          const center = t.columns[k].align === 'c';
+          drawText(page, ln, {
+            x: center ? x + widths[k] / 2 : x + pad,
+            y: y - pad - size + 1 - li * lh,
+            size,
+            font: fontFor(k),
+            color: flagged ? C.red : r.refCol === k ? C.muted : r.valCol === k || r.bold ? C.navy : C.text,
+            align: center ? 'center' : 'left',
+          });
         });
+        vline(page, x, y, y - h, C.border, 0.5);
         x += widths[k];
       });
-      hline(page, L, R, y - h, C.border, 0.4);
+      vline(page, R, y, y - h, C.border, 0.5);
+      hline(page, L, R, y - h, C.border, 0.5);
       y -= h;
     });
-    // vertical grid
-    y -= 8;
-  };
-
-  const steps = (sec) => {
-    sectionTitle(sec.title);
-    const num = sec.title.match(/^(\d+)\./)?.[1] || '2';
-    sec.steps.forEach((s, idx) => {
-      const sizeT = 8.6;
-      const size = 8.2;
-      const innerW = W - 26;
-      const fLines = wrap(fonts.ital, s.formula, size, innerW - 60);
-      const sLines = wrap(fonts.reg, s.subst, size, innerW - 60);
-      const rLines = wrap(fonts.bold, s.result, size + 0.4, innerW - 60);
-      const lh = size * 1.32;
-      const h = 14 + (fLines.length + sLines.length + rLines.length) * lh + 6;
-      ensure(h);
-      drawText(page, `${num}.${idx + 1}`, { x: L + 2, y: y - 10, size: sizeT, font: fonts.bold, color: C.blue });
-      drawText(page, s.title, { x: L + 26, y: y - 10, size: sizeT, font: fonts.bold, color: C.navy });
-      let yy = y - 14 - lh + 2;
-      const label = (t, lines, font, color, sz = size) => {
-        drawText(page, t, { x: L + 26, y: yy, size: 7, font: fonts.reg, color: C.muted });
-        lines.forEach((ln) => {
-          drawText(page, ln, { x: L + 86, y: yy, size: sz, font, color });
-          yy -= lh;
+    if (sec.legend?.length) {
+      y -= 4;
+      sec.legend.forEach((ln) => {
+        const lines = wrap(fonts.ital, ln, 6.4, W - 8);
+        ensure(lines.length * 8 + 2);
+        lines.forEach((l) => {
+          drawText(page, l, { x: L + 4, y: y - 7, size: 6.4, font: fonts.ital, color: C.muted });
+          y -= 8;
         });
-      };
-      label('Formula', fLines, fonts.ital, C.text);
-      label('Substitution', sLines, fonts.reg, C.text);
-      const ry = yy;
-      rect(page, L + 82, ry - (rLines.length - 1) * lh - 3.5, innerW - 56, rLines.length * lh + 1.5, { fill: C.light });
-      label('Result', rLines, fonts.bold, C.navy, size + 0.4);
-      y -= h;
-      hline(page, L + 26, R, y + 3, C.light2, 0.5);
-    });
-    y -= 6;
+      });
+    }
+    y -= 7;
   };
 
-  const results = (sec) => {
-    sectionTitle(sec.title);
-    const size = 8.6;
-    const pad = 5;
-    const lw = W * 0.42;
-    const lh = size * 1.3;
-    const rows = sec.rows.map(([a, b]) => ({ a: wrap(fonts.reg, a, size, lw - pad * 2), b: wrap(fonts.bold, b, size, W - lw - pad * 2) }));
-    rows.forEach((r) => {
-      const h = Math.max(r.a.length, r.b.length) * lh + pad * 2 - 2;
-      ensure(h);
-      rect(page, L, y - h, lw, h, { fill: C.light, stroke: C.border, width: 0.5 });
-      rect(page, L + lw, y - h, W - lw, h, { stroke: C.border, width: 0.5 });
-      r.a.forEach((ln, i) => drawText(page, ln, { x: L + pad, y: y - pad - size + 1 - i * lh, size, font: fonts.reg, color: C.text }));
-      r.b.forEach((ln, i) => drawText(page, ln, { x: L + lw + pad, y: y - pad - size + 1 - i * lh, size, font: fonts.bold, color: C.navy }));
-      y -= h;
-    });
-    y -= 6;
-    (sec.checks || []).forEach((c) => {
-      const lines = wrap(fonts.reg, c.text, 8, W - 70);
-      const h = lines.length * 10.5 + 6;
-      ensure(h);
-      rect(page, L, y - h, W, h, { fill: c.ok ? C.greenBg : C.redBg });
-      rect(page, L + 5, y - 13, 42, 10, { fill: c.ok ? C.green : C.red });
-      drawText(page, c.ok ? 'PASS' : 'CHECK', { x: L + 26, y: y - 10.8, size: 7, font: fonts.bold, color: C.white, align: 'center' });
-      lines.forEach((ln, i) => drawText(page, ln, { x: L + 55, y: y - 11 - i * 10.5, size: 8, font: fonts.reg, color: C.text }));
-      y -= h + 3;
-    });
-    y -= 6;
+  const resultLine = (sec) => {
+    const lines = wrap(fonts.bold, sec.text, 9, W - 20);
+    const h = lines.length * 12 + 10;
+    ensure(h + 4);
+    rect(page, L, y - h, W, h, { fill: C.greenBg, stroke: C.sky, width: 1 });
+    rect(page, L, y - h, 4, h, { fill: C.sky });
+    lines.forEach((ln, i) => drawText(page, ln, { x: L + 12, y: y - 13 - i * 12, size: 9, font: fonts.bold, color: C.navy }));
+    y -= h + 8;
   };
 
-  const notes = (sec) => {
-    sectionTitle(sec.title);
-    sec.items.forEach((n, i) => {
-      const lines = wrap(fonts.reg, n, 7.8, W - 20);
-      const h = lines.length * 10 + 2;
-      ensure(h);
-      drawText(page, `${i + 1}.`, { x: L + 4, y: y - 8, size: 7.8, font: fonts.bold, color: C.muted });
-      lines.forEach((ln, k) => drawText(page, ln, { x: L + 18, y: y - 8 - k * 10, size: 7.8, font: fonts.reg, color: C.muted }));
-      y -= h;
+  const note = (sec) => {
+    const lines = wrap(fonts.ital, sec.text, 7.4, W - 8);
+    ensure(lines.length * 9.5 + 4);
+    lines.forEach((ln) => {
+      drawText(page, ln, { x: L + 2, y: y - 8, size: 7.4, font: fonts.ital, color: C.muted });
+      y -= 9.5;
     });
-    y -= 8;
+    y -= 6;
   };
 
   for (const sec of sheet.sections || []) {
-    if (sec.type === 'table') table(sec);
-    else if (sec.type === 'steps') steps(sec);
-    else if (sec.type === 'results') results(sec);
-    else if (sec.type === 'notes') notes(sec);
+    if (sec.type === 'result') resultLine(sec);
+    else if (sec.type === 'note') note(sec);
+    else {
+      sectionTitle(sec.title);
+      table(sec);
+    }
   }
 
   // Signature block
-  const sigH = 78;
-  ensure(sigH + 6);
+  const sigH = 46;
+  ensure(sigH + 4);
   const colW = W / 3;
-  const sy = y - 6;
-  const roles = [
+  const sy = y - 4;
+  [
     ['PREPARED BY', project.preparedBy || ''],
     ['CHECKED BY', project.checkedBy || ''],
     ['APPROVED BY', project.approvedBy || ''],
-  ];
-  roles.forEach(([role, name], k) => {
+  ].forEach(([role, name], k) => {
     const x = L + k * colW;
     rect(page, x, sy - sigH, colW, sigH, { stroke: C.navy, width: 0.7 });
-    rect(page, x, sy - 15, colW, 15, { fill: C.navy });
-    drawText(page, role, { x: x + colW / 2, y: sy - 10.5, size: 8, font: fonts.bold, color: C.white, align: 'center' });
-    const rowsY = [sy - 30, sy - 50, sy - 70];
-    ['Name', 'Signature', 'Date'].forEach((lbl, j) => {
-      drawText(page, `${lbl}:`, { x: x + 6, y: rowsY[j], size: 7.5, font: fonts.reg, color: C.muted });
-      hline(page, x + 48, x + colW - 8, rowsY[j] - 2, C.border, 0.5);
+    rect(page, x, sy - 13, colW, 13, { fill: C.navy });
+    drawText(page, role, { x: x + colW / 2, y: sy - 9.3, size: 7.4, font: fonts.bold, color: C.white, align: 'center' });
+    [sy - 23, sy - 34, sy - 45 + 2].forEach((ry, j) => {
+      drawText(page, `${['Name', 'Signature', 'Date'][j]}:`, { x: x + 6, y: ry, size: 7, font: fonts.reg, color: C.muted });
+      hline(page, x + 46, x + colW - 8, ry - 2, C.border, 0.5);
     });
-    if (name) drawText(page, name, { x: x + 50, y: sy - 30, size: 8, font: fonts.bold, color: C.text, maxWidth: colW - 58 });
-    if (k === 0 && project.date) drawText(page, fmtDate(project.date), { x: x + 50, y: sy - 70, size: 8, font: fonts.reg, color: C.text });
+    if (name) drawText(page, name, { x: x + 48, y: sy - 23, size: 7.6, font: fonts.bold, color: C.text, maxWidth: colW - 56 });
+    if (k === 0 && project.date) drawText(page, fmtDate(project.date), { x: x + 48, y: sy - 43, size: 7.6, font: fonts.reg, color: C.text });
   });
 
-  // Headers & local footers (now that page count is known)
   pages.forEach((p, idx) => drawSheetHeader(p, fonts, sheet, project, idx + 1, pages.length, logoImg));
   return { pages };
 }
 
 function drawSheetHeader(page, fonts, sheet, project, n, total, logoImg) {
   const yTop = TOP;
-  const h1 = 42;
+  const h1 = 40;
   rect(page, L, yTop - h1, W, h1, { stroke: C.navy, width: 0.8 });
-  const leftW = W * 0.42;
+  const leftW = W * 0.36;
   vline(page, L + leftW, yTop, yTop - h1, C.navy, 0.8);
   if (logoImg) {
-    const sc = Math.min(22 / logoImg.height, (leftW - 16) / logoImg.width);
-    page.drawImage(logoImg, { x: L + 7, y: yTop - 5 - logoImg.height * sc, width: logoImg.width * sc, height: logoImg.height * sc });
-    drawText(page, `ENGINEERING CALCULATION SHEET  ·  ${sheet.calcType || ''}`, { x: L + 8, y: yTop - 37, size: 6.8, font: fonts.bold, color: C.blue, maxWidth: leftW - 14 });
+    const sc = Math.min(24 / logoImg.height, (leftW - 16) / logoImg.width);
+    page.drawImage(logoImg, { x: L + 7, y: yTop - 4 - logoImg.height * sc, width: logoImg.width * sc, height: logoImg.height * sc });
   } else {
-    drawText(page, project.supplier || 'Supplier Name', { x: L + 8, y: yTop - 17, size: 12, font: fonts.bold, color: C.navy, maxWidth: leftW - 14 });
-    drawText(page, 'ENGINEERING CALCULATION SHEET', { x: L + 8, y: yTop - 30, size: 7.5, font: fonts.bold, color: C.blue });
-    drawText(page, sheet.calcType || '', { x: L + 8, y: yTop - 39, size: 6.8, font: fonts.reg, color: C.muted, maxWidth: leftW - 14 });
+    drawText(page, project.supplier || 'Supplier', { x: L + 8, y: yTop - 18, size: 11, font: fonts.bold, color: C.navy, maxWidth: leftW - 14 });
   }
-
+  drawText(page, 'HYDRAULIC CALCULATION SHEET', { x: L + 8, y: yTop - 35, size: 6.4, font: fonts.bold, color: C.blue });
   const gx = L + leftW;
   const gw = W - leftW;
   const cells = [
     ['Project', project.projectName || '–', 'Ref No.', project.refNo || '–'],
-    ['Client', project.consultant || '–', 'Rev.', project.revision || '0'],
-    ['Tag', sheet.tag || '–', 'Sheet', `${n} of ${total}`],
+    ['Tag', sheet.tag || '–', 'Rev.', project.revision || '0'],
+    ['Date', fmtDate(project.date) || '–', 'Sheet', `${n} of ${total}`],
   ];
   const rh = h1 / 3;
   cells.forEach((row, r) => {
     const yy = yTop - rh * (r + 1);
     if (r > 0) hline(page, gx, R, yy + rh, C.border, 0.5);
-    const c1 = gw * 0.62;
+    const c1 = gw * 0.66;
     vline(page, gx + c1, yy, yy + rh, C.border, 0.5);
-    drawText(page, `${row[0]}:`, { x: gx + 5, y: yy + 4.5, size: 6.5, font: fonts.reg, color: C.muted });
-    drawText(page, row[1], { x: gx + 36, y: yy + 4.5, size: 7.2, font: fonts.bold, color: C.text, maxWidth: c1 - 40 });
-    drawText(page, `${row[2]}:`, { x: gx + c1 + 5, y: yy + 4.5, size: 6.5, font: fonts.reg, color: C.muted });
-    drawText(page, row[3], { x: gx + c1 + 38, y: yy + 4.5, size: 7.2, font: fonts.bold, color: C.text, maxWidth: gw - c1 - 42 });
+    drawText(page, `${row[0]}:`, { x: gx + 5, y: yy + 4.3, size: 6.3, font: fonts.reg, color: C.muted });
+    drawText(page, row[1], { x: gx + 36, y: yy + 4.3, size: 7, font: fonts.bold, color: C.text, maxWidth: c1 - 40 });
+    drawText(page, `${row[2]}:`, { x: gx + c1 + 5, y: yy + 4.3, size: 6.3, font: fonts.reg, color: C.muted });
+    drawText(page, row[3], { x: gx + c1 + 38, y: yy + 4.3, size: 7, font: fonts.bold, color: C.text, maxWidth: gw - c1 - 42 });
   });
-
   const tb = yTop - h1;
-  rect(page, L, tb - 22, W, 22, { fill: C.navy });
-  drawText(page, sheet.docTitle || 'CALCULATION', { x: L + W / 2, y: tb - 15, size: 10.5, font: fonts.bold, color: C.white, align: 'center', maxWidth: W - 20 });
-  rect(page, L, tb - 38, W, 16, { fill: C.light, stroke: C.border, width: 0.5 });
-  drawText(page, 'Equipment Tag:', { x: L + 6, y: tb - 33, size: 7.5, font: fonts.reg, color: C.muted });
-  drawText(page, sheet.tag || '–', { x: L + 64, y: tb - 33, size: 8, font: fonts.bold, color: C.navy });
-  drawText(page, 'Service:', { x: L + 150, y: tb - 33, size: 7.5, font: fonts.reg, color: C.muted });
-  drawText(page, sheet.service || '–', { x: L + 182, y: tb - 33, size: 8, font: fonts.bold, color: C.navy, maxWidth: W - 190 });
+  rect(page, L, tb - 20, W, 20, { fill: C.sky });
+  drawText(page, sheet.docTitle || 'HYDRAULIC CALCULATION', { x: L + W / 2, y: tb - 13.5, size: 10, font: fonts.bold, color: C.white, align: 'center', maxWidth: W - 20 });
 
-  // local footer
-  hline(page, L, R, 50, C.border, 0.5);
-  drawText(page, clean(`${project.supplier || ''}${project.refNo ? '  |  ' + project.refNo : ''}`), { x: L, y: 40, size: 6.8, font: fonts.reg, color: C.muted, maxWidth: W * 0.6 });
-  drawText(page, `${sheet.tag || ''} – Sheet ${n} of ${total}`, { x: R, y: 40, size: 6.8, font: fonts.bold, color: C.muted, align: 'right' });
+  hline(page, L, R, 48, C.border, 0.5);
+  drawText(page, clean(`${project.supplier || ''}${project.refNo ? '  |  ' + project.refNo : ''}`), { x: L, y: 39, size: 6.6, font: fonts.reg, color: C.muted, maxWidth: W * 0.6 });
+  drawText(page, `${sheet.tag || ''} – Sheet ${n} of ${total}`, { x: R, y: 39, size: 6.6, font: fonts.bold, color: C.muted, align: 'right' });
 }
 
-/** Standalone calculation-sheet PDF (download from calculators). */
 export async function buildCalcSheetPdf(sheet, project, logo) {
   const doc = await PDFDocument.create();
   doc.setTitle(clean(`${sheet.tag} – ${sheet.docTitle}`));

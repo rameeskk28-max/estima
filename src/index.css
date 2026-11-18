@@ -85,30 +85,30 @@ select.field {
   font-size: 7.2pt;
 }
 .a4 .sec-title {
-  margin: 10pt 0 6pt;
-  padding: 3pt 8pt;
-  background: #e5edf7;
-  border-left: 3pt solid #048c3c;
-  color: #153963;
-  font-weight: 700;
-  font-size: 9.5pt;
-  break-after: avoid;
-}
-.a4 .tbl th {
+  margin: 8pt 0 0;
+  padding: 2.5pt 6pt;
   background: #153963;
   color: #fff;
-  text-align: left;
-  padding: 3pt 4pt;
+  font-weight: 700;
   font-size: 8pt;
+  break-after: avoid;
+}
+.a4 .tbl {
+  border: 0.5pt solid #bcc9db;
+}
+.a4 .tbl th {
+  background: #e5edf7;
+  color: #153963;
+  border: 0.5pt solid #bcc9db;
+  text-align: left;
+  padding: 2.5pt 3pt;
+  font-size: inherit;
 }
 .a4 .tbl td {
-  padding: 3pt 4pt;
-  border-bottom: 0.4pt solid #bcc9db;
-  font-size: 8.2pt;
+  padding: 2.5pt 3pt;
+  border: 0.5pt solid #bcc9db;
+  font-size: inherit;
   vertical-align: top;
-}
-.a4 .tbl tr:nth-child(even) td {
-  background: #f1f5fb;
 }
 .a4 .step {
   break-inside: avoid;
@@ -147,4 +147,162 @@ select.field {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
+}
+
+/* ---------- Pump scene animations ---------- */
+.anim-spin {
+  animation: spin var(--spin, 1s) linear infinite;
+  transform-box: view-box;
+  transform-origin: 0 0;
+}
+.anim-spin-slow {
+  animation: spin 6s linear infinite;
+  transform-box: view-box;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.anim-flow {
+  stroke-dasharray: 8 10;
+  animation: flow var(--flow, 1s) linear infinite;
+}
+.anim-flow-rev {
+  stroke-dasharray: 8 10;
+  animation: flow-rev var(--flow, 1s) linear infinite;
+}
+@keyframes flow {
+  to {
+    stroke-dashoffset: -36;
+  }
+}
+@keyframes flow-rev {
+  to {
+    stroke-dashoffset: 36;
+  }
+}
+.anim-fill,
+.anim-drain,
+.anim-sump {
+  transform-box: fill-box;
+  transform-origin: bottom;
+}
+.anim-fill {
+  animation: fill 7s ease-in-out infinite;
+}
+.anim-drain {
+  animation: drain 7s ease-in-out infinite;
+}
+@keyframes fill {
+  0% { transform: scaleY(0.12); }
+  85% { transform: scaleY(0.95); }
+  100% { transform: scaleY(0.12); }
+}
+@keyframes drain {
+  0% { transform: scaleY(0.95); }
+  85% { transform: scaleY(0.45); }
+  100% { transform: scaleY(0.95); }
+}
+.anim-sump {
+  animation: sump 6s ease-in-out infinite;
+}
+@keyframes sump {
+  0% { transform: scaleY(0.85); }
+  35% { transform: scaleY(0.25); }
+  100% { transform: scaleY(0.85); }
+}
+.anim-sump-float {
+  animation: sump-float 6s ease-in-out infinite;
+}
+@keyframes sump-float {
+  0% { transform: translateY(-14px); }
+  35% { transform: translateY(42px); }
+  100% { transform: translateY(-14px); }
+}
+.anim-wave {
+  animation: wave 1.6s linear infinite;
+}
+@keyframes wave {
+  to { transform: translateX(40px); }
+}
+.anim-drop {
+  animation: drop 0.9s ease-in infinite;
+}
+@keyframes drop {
+  0% { transform: translateY(0); opacity: 1; }
+  100% { transform: translateY(16px); opacity: 0; }
+}
+.anim-needle {
+  transform-box: view-box;
+  transform-origin: 0 0;
+  animation: needle 2.4s ease-in-out infinite alternate;
+}
+@keyframes needle {
+  from { transform: rotate(-35deg); }
+  to { transform: rotate(40deg); }
+}
+.anim-vessel {
+  animation: vessel 4s ease-in-out infinite;
+}
+@keyframes vessel {
+  0%, 100% { transform: translateY(40px); }
+  50% { transform: translateY(-30px); }
+}
+.anim-gauge {
+  transform-box: view-box;
+  transform-origin: 0 0;
+  animation: gauge 4s ease-in-out infinite;
+}
+@keyframes gauge {
+  0%, 100% { transform: rotate(-70deg); }
+  50% { transform: rotate(70deg); }
+}
+.scene-paused * {
+  animation-play-state: paused !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .anim-wave,
+  .anim-drop {
+    animation: none;
+  }
+}
+
+/* ---------- Light theme (applied to the main content area; sidebar stays brand navy) ---------- */
+.theme-light {
+  --color-ink-950: #ffffff;
+  --color-ink-900: #f2f5f9;
+  --color-ink-850: #ffffff;
+  --color-ink-800: #eef2f7;
+  --color-ink-700: #e3e9f1;
+  --color-line: #d9e1eb;
+  --color-slate-50: #0b1424;
+  --color-slate-100: #10203a;
+  --color-slate-200: #1d2d45;
+  --color-slate-300: #34465f;
+  --color-slate-400: #55657c;
+  --color-slate-500: #6b7a90;
+  --color-brand-100: #035f29;
+  --color-brand-200: #047a35;
+  --color-brand-300: #058a3b;
+  --color-brand-400: #059a42;
+  --color-emerald-200: #065f46;
+  --color-amber-200: #8a4b06;
+  --color-amber-300: #a35a00;
+  --color-red-200: #991b1b;
+  --color-red-300: #b91c1c;
+  color-scheme: light;
+}
+.theme-light .card {
+  box-shadow: 0 1px 2px rgb(16 32 58 / 0.06), 0 4px 16px rgb(16 32 58 / 0.05);
+}
+.theme-light .field {
+  background: #fff;
+}
+.theme-light .field:disabled {
+  background: #f3f6fa;
+  color: #9aa7b8;
+}
+.theme-light ::selection {
+  background: #bdf0d2;
 }

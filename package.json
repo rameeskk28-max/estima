@@ -8,10 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node scripts/selftest.mjs",
-    "add-user": "node scripts/add-user.mjs",
-    "gen-secret": "node scripts/gen-secret.mjs",
-    "preview:auth": "node scripts/serve-auth.mjs"
+    "test": "node scripts/selftest.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.75.0",

@@ -24,6 +24,3 @@
   for = "/assets/*"
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
-
-# Server-side authentication (see netlify/edge-functions/auth.js).
-# Requires env vars AUTH_SECRET and APP_USERS – see README "User accounts".

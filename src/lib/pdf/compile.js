@@ -1,8 +1,9 @@
 import { PDFDocument, degrees } from 'pdf-lib';
 import { A4, A4L, C, loadFonts, wrap, drawText, rect, hline, clean, truncate, fmtDate } from './theme.js';
 import { renderCalcSheet } from './calcSheet.js';
+import { renderManualSchedule } from './schedulePdf.js';
 import { fmt, lpsToM3h, mToBar } from '../hydraulics.js';
-import { SECTION_CATEGORIES } from '../calcs/common.js';
+import { SECTION_CATEGORIES } from '../calcs/engine.js';
 
 const pad2 = (n) => String(n).padStart(2, '0');
 
@@ -29,7 +30,7 @@ export function buildPlan(entries, duties, files) {
  * @param {{project: object, entries: object[], duties: object[], files: Record<string, {name:string, bytes:ArrayBuffer|Uint8Array}[]>, logo?: {bytes:ArrayBuffer, type:string}}} input
  * @param {(msg: string) => void} [onProgress]
  */
-export async function compileSubmittal({ project = {}, entries = [], duties = [], files = {}, logo }, onProgress = () => {}) {
+export async function compileSubmittal({ project = {}, entries = [], duties = [], files = {}, logo, schedule }, onProgress = () => {}) {
   const doc = await PDFDocument.create();
   const fonts = await loadFonts(doc);
   const warnings = [];
@@ -77,7 +78,7 @@ export async function compileSubmittal({ project = {}, entries = [], duties = []
     for (const it of s.items) {
       it.startPage = doc.getPageCount() + 1;
       if (it.type === 'schedule') {
-        const pages = drawSchedule(doc, fonts, project, duties);
+        const pages = schedule?.rows?.length ? renderManualSchedule(doc, fonts, schedule, project) : drawSchedule(doc, fonts, project, duties);
         track(pages, label);
       } else if (it.type === 'calc') {
         const { pages } = await renderCalcSheet(doc, fonts, it.duty.sheet, project, logoImg);
@@ -157,7 +158,8 @@ function drawCover(doc, fonts, p, logoImg) {
   y -= 10;
 
   const rows = [
-    ['Consultant / Client', p.consultant],
+    ['Client', p.client],
+    ['Consultant', p.consultant],
     ['MEP Contractor', p.contractor],
     ['Supplier', p.supplier],
     ['Submittal Reference No.', p.refNo],
