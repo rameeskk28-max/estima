@@ -154,9 +154,23 @@ export async function renderCalcSheet(doc, fonts, sheet, project = {}, logoImg =
     y -= 6;
   };
 
+  // Framed picture (e.g. product photo) – sec.pdfImage is an embedded PDFImage
+  const imageBox = (sec) => {
+    if (!sec.pdfImage) return;
+    sectionTitle(sec.title);
+    const boxH = 170;
+    ensure(boxH + 8);
+    rect(page, L, y - boxH, W, boxH, { stroke: C.border, width: 0.5 });
+    const img = sec.pdfImage;
+    const sc = Math.min((W - 20) / img.width, (boxH - 16) / img.height);
+    page.drawImage(img, { x: L + W / 2 - (img.width * sc) / 2, y: y - boxH / 2 - (img.height * sc) / 2, width: img.width * sc, height: img.height * sc });
+    y -= boxH + 8;
+  };
+
   for (const sec of sheet.sections || []) {
     if (sec.type === 'result') resultLine(sec);
     else if (sec.type === 'note') note(sec);
+    else if (sec.type === 'image') imageBox(sec);
     else {
       sectionTitle(sec.title);
       table(sec);
@@ -164,6 +178,7 @@ export async function renderCalcSheet(doc, fonts, sheet, project = {}, logoImg =
   }
 
   // Signature block
+  if (sheet.signatures !== false) {
   const sigH = 46;
   ensure(sigH + 4);
   const colW = W / 3;
@@ -185,6 +200,7 @@ export async function renderCalcSheet(doc, fonts, sheet, project = {}, logoImg =
     if (k === 0 && project.date) drawText(page, fmtDate(project.date), { x: x + 48, y: sy - 43, size: 7.6, font: fonts.reg, color: C.text });
   });
 
+  }
   pages.forEach((p, idx) => drawSheetHeader(p, fonts, sheet, project, idx + 1, pages.length, logoImg));
   return { pages };
 }
@@ -201,7 +217,7 @@ function drawSheetHeader(page, fonts, sheet, project, n, total, logoImg) {
   } else {
     drawText(page, project.supplier || 'Supplier', { x: L + 8, y: yTop - 18, size: 11, font: fonts.bold, color: C.navy, maxWidth: leftW - 14 });
   }
-  drawText(page, 'HYDRAULIC CALCULATION SHEET', { x: L + 8, y: yTop - 35, size: 6.4, font: fonts.bold, color: C.blue });
+  drawText(page, sheet.sheetLabel || 'HYDRAULIC CALCULATION SHEET', { x: L + 8, y: yTop - 35, size: 6.4, font: fonts.bold, color: C.blue });
   const gx = L + leftW;
   const gw = W - leftW;
   const cells = [

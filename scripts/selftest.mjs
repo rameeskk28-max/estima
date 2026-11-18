@@ -90,7 +90,7 @@ assert(fillText(lits[0].logic.split('\n')[0], lits[0]).includes('2 Nos. of Frank
 for (const l of lits) {
   const r = await buildLiteraturePdf(l, project, { logo, attachments: [{ name: 'Datasheet.pdf', bytes: await sample('Datasheet', [595.28, 841.89], 0, 1) }] });
   writeFileSync(`${out}/literature-${l.template}.pdf`, r.bytes);
-  assert((await PDFDocument.load(r.bytes)).getPageCount() >= 3, `literature PDF ${l.template} (+ datasheet)`);
+  assert((await PDFDocument.load(r.bytes)).getPageCount() >= 2, `literature PDF ${l.template} (+ datasheet)`);
 }
 files[`lit-${lits[1].id}-datasheet`] = [{ name: 'Booster datasheet.pdf', bytes: await sample('Booster datasheet', [595.28, 841.89], 0, 2) }];
 files[`lit-${lits[1].id}-drawing`] = [{ name: 'Skid layout.pdf', bytes: await sample('Skid layout', [841.89, 595.28], 0, 1) }];

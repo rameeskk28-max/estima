@@ -1,131 +1,260 @@
-import { useEffect, useState } from 'react';
-import { Building2, ArrowUpDown, Waves, Cylinder, Snowflake, Package, RotateCcw, Menu, X, TableProperties, Sun, Moon, BookOpen } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { RotateCcw, Menu, X, Sun, Moon, ChevronDown, ChevronRight, Home as HomeIcon, ArrowRight } from 'lucide-react';
 import { StoreProvider, useStore } from './store.jsx';
 import { BoosterCalc, TransferCalc, SumpCalc, VesselCalc, ChwCalc } from './modules/calculators/Calculators.jsx';
 import { SubmittalBuilder } from './modules/submittal/SubmittalBuilder.jsx';
 import { PumpScheduleTab } from './modules/schedule/PumpScheduleTab.jsx';
 import { LiteratureTab } from './modules/literature/LiteratureTab.jsx';
+import { Home, FOLDERS, CALC_ITEMS, useReveal } from './modules/home/Home.jsx';
 import { Toast } from './components/ui.jsx';
 import { BRAND } from './brand.js';
 
-const NAV = [
-  { group: 'Module 1 · Hydraulic Calculators' },
-  { key: 'booster', label: 'Booster Pump Set', icon: Building2, el: BoosterCalc },
-  { key: 'transfer', label: 'Transfer Pump', icon: ArrowUpDown, el: TransferCalc },
-  { key: 'sump', label: 'Sump / Sewage Pump', icon: Waves, el: SumpCalc },
-  { key: 'vessel', label: 'Pressure Vessel', icon: Cylinder, el: VesselCalc },
-  { key: 'chw', label: 'Chilled Water Pump', icon: Snowflake, el: ChwCalc },
-  { group: 'Module 2 · Submittal' },
-  { key: 'schedule', label: 'Pump Schedule', icon: TableProperties, el: PumpScheduleTab },
-  { key: 'literature', label: 'Technical Literature', icon: BookOpen, el: LiteratureTab },
-  { key: 'submittal', label: 'Submittal Builder', icon: Package, el: SubmittalBuilder },
-];
-const PAGES = NAV.filter((n) => n.key);
-const fromHash = () => {
-  const k = window.location.hash.replace(/^#\/?/, '');
-  return PAGES.some((p) => p.key === k) ? k : 'booster';
-};
+const CALC_PAGES = { booster: BoosterCalc, transfer: TransferCalc, sump: SumpCalc, vessel: VesselCalc, chw: ChwCalc };
+const LEGACY = { booster: 'calc/booster', transfer: 'calc/transfer', sump: 'calc/sump', vessel: 'calc/vessel', chw: 'calc/chw' };
+
+function parseRoute() {
+  let r = window.location.hash.replace(/^#\/?/, '');
+  if (LEGACY[r]) r = LEGACY[r];
+  const [folder, item] = r.split('/');
+  if (folder === 'calc') return { folder: 'calc', item: CALC_PAGES[item] ? item : null };
+  if (['schedule', 'literature', 'submittal'].includes(folder)) return { folder, item: null };
+  return { folder: 'home', item: null };
+}
 
 function Shell() {
-  const [view, setView] = useState(fromHash);
-  const [open, setOpen] = useState(false);
-  const { toast, duties, project, resetAll, notify, theme, setTheme, schedule, literature } = useStore();
+  const [route, setRoute] = useState(parseRoute);
+  const [menu, setMenu] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const { toast, theme, setTheme } = useStore();
+
   useEffect(() => {
-    const h = () => setView(fromHash());
+    const h = () => setRoute(parseRoute());
     window.addEventListener('hashchange', h);
-    return () => window.removeEventListener('hashchange', h);
+    const s = () => setScrolled(window.scrollY > 20);
+    window.addEventListener('scroll', s, { passive: true });
+    return () => {
+      window.removeEventListener('hashchange', h);
+      window.removeEventListener('scroll', s);
+    };
   }, []);
-  const go = (k) => {
-    window.location.hash = `/${k}`;
-    setOpen(false);
+
+  const go = (r) => {
+    window.location.hash = r ? `/${r}` : '/';
+    setMenu(false);
     window.scrollTo({ top: 0 });
   };
-  const Page = PAGES.find((p) => p.key === view).el;
+
+  const light = theme === 'light';
+  const key = `${route.folder}/${route.item || ''}`;
 
   return (
-    <div className="flex min-h-full">
-      <aside style={{ background: 'linear-gradient(180deg, #153963 0%, #0d2440 45%, #06111f 100%)' }} className={`no-print fixed inset-y-0 left-0 z-40 flex w-64 shrink-0 flex-col border-r border-line transition-transform lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="relative border-b border-line px-4 py-4">
-          <div className="rounded-lg bg-white px-3 py-2.5 shadow-inner">
-            <img src={BRAND.logoUrl} alt={BRAND.legalName} className="h-auto w-full" />
-          </div>
-          <div className="mt-2.5 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-400">
-            <span className="h-1.5 w-1.5 rounded-full bg-brand-500" /> Pump Engineering Suite
-          </div>
-          <button className="btn-ghost absolute right-1 top-1 !p-1 lg:hidden" onClick={() => setOpen(false)} aria-label="Close menu">
-            <X size={18} />
+    <div className={`bg-grid-pattern relative min-h-screen bg-ink-900 text-slate-200 ${light ? 'theme-light' : ''}`}>
+      {/* ambient glow orbs */}
+      <div className="pointer-events-none fixed inset-0 -z-0 overflow-hidden" aria-hidden="true">
+        <div className={`absolute -left-40 -top-40 h-[520px] w-[520px] animate-pulse-glow rounded-full blur-[130px] ${light ? 'bg-brand-500/15' : 'bg-brand-600/20'}`} />
+        <div className={`absolute -right-40 top-1/3 h-[480px] w-[480px] animate-pulse-glow rounded-full blur-[130px] ${light ? 'bg-navy-500/10' : 'bg-navy-500/15'}`} style={{ animationDelay: '2s' }} />
+      </div>
+
+      <header className={`no-print sticky top-0 z-40 transition-all duration-300 ${scrolled || menu ? 'nav-glass border-b border-line' : 'border-b border-transparent'}`}>
+        <div className="mx-auto flex h-[72px] max-w-[1500px] items-center justify-between gap-4 px-4 sm:px-6">
+          <button onClick={() => go('')} className="group flex items-center gap-3" aria-label="Home">
+            <span className="rounded-xl bg-white px-2.5 py-1.5 shadow-lg shadow-brand-500/10 transition-transform group-hover:scale-[1.03]">
+              <img src={BRAND.logoUrl} alt={BRAND.legalName} className="h-7 w-auto" />
+            </span>
+            <span className="hidden font-display text-sm font-bold leading-tight tracking-tight text-slate-50 xl:block">
+              Pump Engineering
+              <br />
+              <span className="text-brand-400">Suite</span>
+            </span>
           </button>
+
+          <nav className="hidden items-center gap-1 text-sm font-medium lg:flex">
+            <NavLink active={route.folder === 'home'} onClick={() => go('')}>
+              Home
+            </NavLink>
+            <CalcMenu active={route.folder === 'calc'} go={go} />
+            {FOLDERS.slice(1).map((f) => (
+              <NavLink key={f.key} active={route.folder === f.key} onClick={() => go(f.route)}>
+                {f.label}
+              </NavLink>
+            ))}
+          </nav>
+
+          <div className="flex items-center gap-2">
+            <button onClick={() => setTheme(light ? 'dark' : 'light')} className="glass-pill flex h-10 w-10 items-center justify-center rounded-xl text-slate-300 transition hover:text-slate-50" title={light ? 'Switch to dark theme' : 'Switch to light theme'} aria-label="Toggle theme">
+              {light ? <Moon size={17} /> : <Sun size={17} />}
+            </button>
+            <button onClick={() => go('submittal')} className="btn-primary hidden !px-5 !py-2.5 sm:inline-flex">
+              Compile Submittal
+            </button>
+            <button onClick={() => setMenu((m) => !m)} className="glass-pill flex h-10 w-10 items-center justify-center rounded-xl text-slate-200 lg:hidden" aria-label="Toggle menu">
+              {menu ? <X size={20} /> : <Menu size={20} />}
+            </button>
+          </div>
         </div>
-        <nav className="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-3">
-          {NAV.map((n, i) =>
-            n.group ? (
-              <div key={i} className="px-2 pb-1 pt-4 text-[10px] font-semibold uppercase tracking-widest text-slate-500 first:pt-1">
-                {n.group}
+        {menu && (
+          <div className="border-t border-line px-5 py-5 lg:hidden">
+            <button onClick={() => go('')} className="block py-1.5 text-base font-medium text-slate-200">
+              Home
+            </button>
+            {FOLDERS.map((f) => (
+              <div key={f.key} className="py-1.5">
+                <button onClick={() => go(f.key === 'calc' ? 'calc' : f.route)} className="flex items-center gap-2 text-base font-medium text-slate-200">
+                  <f.icon size={16} className="text-brand-400" /> {f.label}
+                </button>
+                {f.key === 'calc' && (
+                  <div className="ml-6 mt-1 space-y-1 border-l border-line pl-3">
+                    {CALC_ITEMS.map((c) => (
+                      <button key={c.key} onClick={() => go(`calc/${c.key}`)} className="block text-sm text-slate-400 hover:text-slate-50">
+                        {c.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-            ) : (
+            ))}
+            <button onClick={() => go('submittal')} className="btn-primary mt-4 w-full">
+              Compile Submittal
+            </button>
+          </div>
+        )}
+      </header>
+
+      <main className="relative z-10 mx-auto max-w-[1500px] px-4 pb-10 sm:px-6">
+        <div key={key} className="page-enter">
+          {route.folder === 'home' ? <Home go={go} /> : <FolderPage route={route} go={go} />}
+        </div>
+      </main>
+
+      <Footer go={go} />
+      <Toast toast={toast} />
+    </div>
+  );
+}
+
+function NavLink({ active, onClick, children }) {
+  return (
+    <button onClick={onClick} className={`rounded-xl px-3.5 py-2 transition ${active ? 'bg-brand-500/15 text-brand-400' : 'text-slate-300 hover:text-slate-50'}`}>
+      {children}
+    </button>
+  );
+}
+
+function CalcMenu({ active, go }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    const h = (e) => ref.current && !ref.current.contains(e.target) && setOpen(false);
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, []);
+  return (
+    <div ref={ref} className="relative" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+      <button onClick={() => setOpen((o) => !o)} className={`flex items-center gap-1 rounded-xl px-3.5 py-2 transition ${active ? 'bg-brand-500/15 text-brand-400' : 'text-slate-300 hover:text-slate-50'}`} aria-expanded={open}>
+        Hydraulic Calculations <ChevronDown size={14} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full z-50 pt-2">
+          <div className="card w-80 rounded-2xl p-2" style={{ background: 'var(--menu-bg, var(--glass-bg))' }}>
+            {CALC_ITEMS.map((c) => (
               <button
-                key={n.key}
-                onClick={() => go(n.key)}
-                className={`flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition ${view === n.key ? 'bg-brand-500 font-semibold text-white shadow-lg shadow-brand-500/25' : 'text-slate-300 hover:bg-white/10 hover:text-white'}`}
+                key={c.key}
+                onClick={() => {
+                  setOpen(false);
+                  go(`calc/${c.key}`);
+                }}
+                className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-brand-500/10"
               >
-                <n.icon size={16} />
-                {n.label}
-                {n.key === 'submittal' && duties.length > 0 && <span className="ml-auto rounded-full bg-white/20 px-1.5 text-[10px] font-semibold text-white">{duties.length}</span>}
-                {n.key === 'literature' && literature.length > 0 && <span className="ml-auto rounded-full bg-white/20 px-1.5 text-[10px] font-semibold text-white">{literature.length}</span>}
-                {n.key === 'schedule' && schedule.rows.length > 0 && <span className="ml-auto rounded-full bg-white/20 px-1.5 text-[10px] font-semibold text-white">{schedule.rows.length}</span>}
-              </button>
-            ),
-          )}
-        </nav>
-        <div className="shrink-0 border-t border-white/10 p-3 text-[11px] text-slate-400">
-          <div className="mb-3 grid grid-cols-2 gap-1 rounded-lg bg-black/25 p-1" role="radiogroup" aria-label="Theme">
-            {[
-              ['light', 'Light', Sun],
-              ['dark', 'Dark', Moon],
-            ].map(([k, lbl, Ic]) => (
-              <button key={k} role="radio" aria-checked={theme === k} onClick={() => setTheme(k)} className={`flex items-center justify-center gap-1.5 rounded-md py-1.5 text-xs font-medium transition ${theme === k ? 'bg-white text-ink-600 shadow' : 'text-slate-300 hover:text-white'}`}>
-                <Ic size={13} /> {lbl}
+                <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-500/15 text-brand-400">
+                  <c.icon size={16} />
+                </span>
+                <span>
+                  <span className="block text-sm font-semibold text-slate-50">{c.label}</span>
+                  <span className="block text-xs text-slate-400">{c.desc}</span>
+                </span>
               </button>
             ))}
           </div>
-          <div className="truncate" title={project.projectName}>
-            {project.projectName || 'No project set'}
-          </div>
-          <button
-            className="mt-2 flex items-center gap-1.5 text-slate-400 hover:text-red-300"
-            onClick={async () => {
-              if (confirm('Clear ALL data (project header, saved duties, index, uploaded files and calculator inputs)?')) {
-                await resetAll();
-                notify('Workspace cleared');
-              }
-            }}
-          >
-            <RotateCcw size={12} /> Reset workspace
-          </button>
-          <DeveloperCredit className="mt-3 border-t border-white/10 pt-3" />
         </div>
-      </aside>
-      {open && <div className="fixed inset-0 z-30 bg-black/60 lg:hidden" onClick={() => setOpen(false)} />}
+      )}
+    </div>
+  );
+}
 
-      <div className={`min-h-screen min-w-0 flex-1 bg-ink-900 text-slate-200 ${theme === 'light' ? 'theme-light' : ''}`}>
-        <header className="no-print sticky top-0 z-20 flex items-center gap-3 border-b border-line bg-ink-900/90 px-4 py-2.5 backdrop-blur lg:hidden">
-          <button className="btn-ghost !p-1" onClick={() => setOpen(true)} aria-label="Open menu">
-            <Menu size={20} />
+/** Folder header (breadcrumb + tabs) and page content. */
+function FolderPage({ route, go }) {
+  const folder = FOLDERS.find((f) => f.key === route.folder);
+  const calcItem = CALC_ITEMS.find((c) => c.key === route.item);
+  const Page = route.folder === 'calc' ? CALC_PAGES[route.item] : { schedule: PumpScheduleTab, literature: LiteratureTab, submittal: SubmittalBuilder }[route.folder];
+  return (
+    <div className="pt-6">
+      <div className="no-print mb-6 flex flex-wrap items-center justify-between gap-4">
+        <nav className="flex items-center gap-1.5 text-xs text-slate-400" aria-label="Breadcrumb">
+          <button onClick={() => go('')} className="flex items-center gap-1 hover:text-slate-50">
+            <HomeIcon size={13} /> Home
           </button>
-          <img src={BRAND.markUrl} alt="" className="h-7 w-7 rounded" />
-          <span className="text-sm font-bold tracking-wide text-slate-50">
-            GREEN<span className="text-brand-400">LAND</span> <span className="font-normal text-slate-400">Pump Suite</span>
-          </span>
-        </header>
-        <main className="mx-auto max-w-[1500px] p-4 sm:p-6">
-          <Page />
-          <footer className="no-print mt-10 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-4 text-xs text-slate-500">
-            <span>© {new Date().getFullYear()} {BRAND.legalName}</span>
-            <DeveloperCredit light />
-          </footer>
-        </main>
+          <ChevronRight size={13} />
+          <button onClick={() => go(folder.key === 'calc' ? 'calc' : folder.route)} className={calcItem ? 'hover:text-slate-50' : 'font-semibold text-slate-200'}>
+            {folder.label}
+          </button>
+          {calcItem && (
+            <>
+              <ChevronRight size={13} />
+              <span className="font-semibold text-slate-200">{calcItem.label}</span>
+            </>
+          )}
+        </nav>
+        {route.folder === 'calc' && (
+          <div className="card inline-flex flex-wrap gap-1 rounded-2xl p-1.5" role="tablist">
+            {CALC_ITEMS.map((c) => (
+              <button
+                key={c.key}
+                role="tab"
+                aria-selected={route.item === c.key}
+                onClick={() => go(`calc/${c.key}`)}
+                className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition sm:text-sm ${route.item === c.key ? 'bg-brand-600 text-white shadow-md shadow-brand-600/25' : 'text-slate-400 hover:text-slate-50'}`}
+              >
+                <c.icon size={14} /> {c.label.replace(' Pump Set', '').replace('Sump / Sewage', 'Sump')}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
-      <Toast toast={toast} />
+      {Page ? <Page /> : <CalcFolder go={go} />}
+    </div>
+  );
+}
+
+function CalcFolder({ go }) {
+  const { duties } = useStore();
+  const ref = useReveal();
+  return (
+    <div ref={ref}>
+      <div className="reveal-up mb-8 max-w-3xl">
+        <span className="font-mono text-xs uppercase tracking-widest text-brand-400">Folder 01</span>
+        <h1 className="mt-2 font-display text-3xl font-bold text-slate-50 sm:text-4xl">Hydraulic Calculations</h1>
+        <p className="mt-3 text-slate-400">Each calculator follows the Greenland calculation-sheet format – project information, flow, head-loss table and final head – with a reference for every step.</p>
+      </div>
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        {CALC_ITEMS.map((c, i) => {
+          const saved = duties.filter((d) => d.calcType && d.calcType.toLowerCase().includes(c.label.split(' ')[0].toLowerCase())).length;
+          return (
+            <button key={c.key} onClick={() => go(`calc/${c.key}`)} className="card reveal-up group rounded-3xl p-6 text-left transition hover:border-brand-500/50" style={{ transitionDelay: `${i * 70}ms` }}>
+              <div className="mb-5 flex items-center justify-between">
+                <span className="flex h-11 w-11 items-center justify-center rounded-2xl border border-brand-500/25 bg-brand-500/15 text-brand-400">
+                  <c.icon size={20} />
+                </span>
+                {saved > 0 && <span className="glass-pill rounded-full px-2.5 py-0.5 text-xs text-slate-300">{saved} saved</span>}
+              </div>
+              <h3 className="font-display text-xl font-bold text-slate-50">{c.label}</h3>
+              <p className="mt-2 text-sm text-slate-400">{c.desc}</p>
+              <span className="mt-5 inline-flex items-center gap-1.5 text-xs font-semibold text-brand-400">
+                Open calculator <ArrowRight size={14} className="transition-transform group-hover:translate-x-1" />
+              </span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -136,24 +265,60 @@ const LinkedInIcon = ({ size = 14 }) => (
   </svg>
 );
 
-/** "Designed & developed by" credit linking to the developer's LinkedIn profile. */
-function DeveloperCredit({ className = '', light }) {
+/** "Designed & developed by Ramees" – the name links to LinkedIn. */
+export function DeveloperCredit({ className = '' }) {
   const d = BRAND.developer;
   return (
-    <a
-      href={d.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className={`group flex items-center gap-2 text-[11px] transition ${light ? 'text-slate-500 hover:text-[#0a66c2]' : 'text-slate-400 hover:text-white'} ${className}`}
-      title="Developer's LinkedIn profile"
-    >
-      <span className="flex h-5 w-5 items-center justify-center rounded bg-[#0a66c2] text-white">
-        <LinkedInIcon size={12} />
-      </span>
-      <span>
-        {d.label} <span className="font-semibold underline-offset-2 group-hover:underline">{d.handle}</span>
-      </span>
-    </a>
+    <span className={`inline-flex items-center gap-1.5 text-xs text-slate-400 ${className}`}>
+      {d.label}
+      <a href={d.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-semibold text-slate-50 underline decoration-brand-500/60 underline-offset-4 transition hover:text-[#4c9be8] hover:decoration-[#4c9be8]" title="Ramees on LinkedIn">
+        {d.name}
+        <span className="flex h-4 w-4 items-center justify-center rounded-[3px] bg-[#0a66c2] text-white">
+          <LinkedInIcon size={10} />
+        </span>
+      </a>
+    </span>
+  );
+}
+
+function Footer({ go }) {
+  const { resetAll, notify } = useStore();
+  return (
+    <footer className="no-print relative z-10 border-t border-line py-10">
+      <div className="mx-auto flex max-w-[1500px] flex-col items-center justify-between gap-5 px-4 sm:px-6 md:flex-row">
+        <div className="flex flex-col items-center gap-1 md:items-start">
+          <span className="font-display text-lg font-bold text-slate-50">
+            GREEN<span className="text-brand-400">LAND</span>
+            <span className="text-brand-400">.</span>
+          </span>
+          <span className="text-xs text-slate-500">
+            © {new Date().getFullYear()} {BRAND.legalName}
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-slate-400">
+          <button onClick={() => go('')} className="hover:text-slate-50">
+            Home
+          </button>
+          {FOLDERS.map((f) => (
+            <button key={f.key} onClick={() => go(f.key === 'calc' ? 'calc' : f.route)} className="hover:text-slate-50">
+              {f.label}
+            </button>
+          ))}
+          <button
+            className="flex items-center gap-1 hover:text-red-400"
+            onClick={async () => {
+              if (confirm('Clear ALL data (project header, saved duties, schedule, literature, index, uploaded files and calculator inputs)?')) {
+                await resetAll();
+                notify('Workspace cleared');
+              }
+            }}
+          >
+            <RotateCcw size={12} /> Reset workspace
+          </button>
+        </div>
+        <DeveloperCredit />
+      </div>
+    </footer>
   );
 }
 

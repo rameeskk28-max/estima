@@ -16,7 +16,7 @@ export function SubmittalBuilder() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="flex items-center gap-2 text-xl font-semibold text-slate-50">
+        <h1 className="flex items-center gap-2 font-display text-2xl font-bold tracking-tight text-slate-50">
           <Package className="text-brand-400" size={22} /> Submittal Package Builder
         </h1>
         <p className="mt-1 max-w-3xl text-sm text-slate-400">

@@ -42,18 +42,22 @@ Transfer · Booster with VFD · Booster without VFD · Circulation · Sump pump 
 Wording is pre-filled and editable; placeholders `{brand} {model} {type} {n} {configText} {header} {vessel}`
 update automatically. Quick-fill from a calculator duty or the pump schedule, optional product photo
 (faded background), upload slots for **pump datasheet & curves** and **drawing / skid layout** on each
-literature. Download as PDF, or let the submittal insert it in the matching Technical Literature section
+literature. The PDF uses exactly the same header, title bar, section bars, tables and signature block as the
+hydraulic calculation sheets. Download as PDF, or let the submittal insert it in the matching Technical Literature section
 (order: literature → datasheet → hydraulic calculation → drawing).
 
 ## Module 2 – Submittal builder
 Project header, editable 14-point UAE index, PDF uploads per section, compile to a single A4 PDF with
 cover, mapped TOC, section dividers, pump schedule, calculation sheets and merged uploads.
 
-## Themes
-Light (default) and Dark – switch at the bottom of the sidebar.
+## Layout & themes
+Home page with a short intro and four folders – **Hydraulic Calculations**, **Pump Schedule**, **Technical
+Literature**, **Submittal Package** – reachable from the top navigation (calculators as tabs inside their folder).
+Dark "glass" design (grid background, glow orbs, frosted cards, Space Grotesk headings) in Greenland green & navy,
+with a light version – toggle with the sun / moon button.
 
 ## Deploy
 See **DEPLOY-NETLIFY.md** – Netlify builds from the GitHub `main` branch automatically.
 
 ---
-Designed & developed by [linkedin.com/in/rameeskk](https://www.linkedin.com/in/rameeskk)
+Designed & developed by [Ramees](https://www.linkedin.com/in/rameeskk)

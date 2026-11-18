@@ -16,7 +16,7 @@ export function SheetHtml({ sheet, project }) {
           <tr>
             <td rowSpan={3} style={{ width: '36%' }}>
               <img src={logoSrc} alt={project.supplier || 'Supplier'} style={{ height: '8.5mm', maxWidth: '64mm', objectFit: 'contain', display: 'block' }} />
-              <div style={{ fontSize: '6.4pt', fontWeight: 700, color: '#048c3c', marginTop: 2 }}>HYDRAULIC CALCULATION SHEET</div>
+              <div style={{ fontSize: '6.4pt', fontWeight: 700, color: '#048c3c', marginTop: 2 }}>{sheet.sheetLabel || 'HYDRAULIC CALCULATION SHEET'}</div>
             </td>
             <HdrCell k="Project" v={project.projectName} />
             <HdrCell k="Ref No." v={project.refNo} />
@@ -40,6 +40,15 @@ export function SheetHtml({ sheet, project }) {
               {sec.text}
             </div>
           );
+        if (sec.type === 'image')
+          return sec.src ? (
+            <div key={si} style={{ marginBottom: 7 }}>
+              <div className="sec-title">{sec.title}</div>
+              <div style={{ border: '0.5pt solid #bcc9db', height: '60mm', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 6 }}>
+                <img src={sec.src} alt={sec.title} style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} />
+              </div>
+            </div>
+          ) : null;
         if (sec.type === 'note')
           return (
             <p key={si} style={{ fontStyle: 'italic', color: '#617086', fontSize: '7.4pt', margin: '4pt 0 8pt' }}>
@@ -94,6 +103,7 @@ export function SheetHtml({ sheet, project }) {
         );
       })}
 
+      {sheet.signatures !== false && (
       <table className="sig" style={{ marginTop: 10, breakInside: 'avoid' }}>
         <tbody>
           <tr>
@@ -120,6 +130,7 @@ export function SheetHtml({ sheet, project }) {
           </tr>
         </tbody>
       </table>
+      )}
     </div>
   );
 }

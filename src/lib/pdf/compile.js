@@ -89,7 +89,7 @@ export async function compileSubmittal({ project = {}, entries = [], duties = []
         track(pages, label);
       } else if (it.type === 'literature') {
         const productImg = await embedImage(doc, dataUrlToImage(it.lit.image));
-        track(renderLiterature(doc, fonts, it.lit, project, { logoImg, productImg }), label);
+        track(await renderLiterature(doc, fonts, it.lit, project, { logoImg, productImg }), label);
       } else if (it.type === 'calc') {
         const { pages } = await renderCalcSheet(doc, fonts, it.duty.sheet, project, logoImg);
         track(pages, label);

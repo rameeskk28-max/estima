@@ -45,7 +45,7 @@ export function CalcShell({ calcKey, icon, description, children, pump = true })
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="flex items-center gap-2 text-xl font-semibold text-slate-50">
+          <h1 className="flex items-center gap-2 font-display text-2xl font-bold tracking-tight text-slate-50">
             <Icon className="text-brand-400" size={22} /> {calc.label}
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-slate-400">{description}</p>

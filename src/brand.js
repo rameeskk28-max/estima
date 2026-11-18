@@ -8,7 +8,7 @@ export const BRAND = {
   legalName: 'Greenland Equipment & Machinery Est. L.L.C',
   tagline: 'Pumps · Booster Sets · Pressure Vessels · HVAC Pumping Systems',
   slogan: 'Sustainable engineering solutions for better tomorrow.',
-  developer: { label: 'Designed & developed by', url: 'https://www.linkedin.com/in/rameeskk', handle: 'linkedin.com/in/rameeskk' },
+  developer: { label: 'Designed & developed by', name: 'Ramees', url: 'https://www.linkedin.com/in/rameeskk', handle: 'linkedin.com/in/rameeskk' },
   logoUrl,
   markUrl,
   green: '#06AF4B',

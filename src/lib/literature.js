@@ -168,6 +168,7 @@ export const newLiterature = (template = 'transfer', o = {}) => {
   const id = Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-3);
   return {
     template,
+    tag: '',
     category: t.category,
     title: `${t.title}- (H2-A)`,
     config: template === 'booster-vfd' || template === 'booster-fixed' ? '1D+1S+1A' : '1D+1S',
@@ -188,7 +189,7 @@ export const newLiterature = (template = 'transfer', o = {}) => {
     logicStyle: t.logicStyle,
     logic: t.logic.join('\n'),
     scope: t.scope,
-    cover: true,
+    cover: false,
     image: null,
     ...o,
     id,
@@ -249,4 +250,81 @@ export function parseDuty(text) {
   const m = String(text || '').match(/([\d.]+)\s*L\/?P?S.*?@\s*([\d.]+)\s*(BAR|M)/i);
   if (!m) return null;
   return { flow: m[1], head: m[3].toUpperCase() === 'BAR' ? (Number(m[2]) * 10.197).toFixed(1) : m[2] };
+}
+
+/**
+ * Technical literature expressed as a calculation-sheet object, so it is rendered with the
+ * same header, title bar, tables, fonts and alignment as the hydraulic calculation sheets.
+ * @param {object} lit literature record
+ * @param {{ imageSrc?: string, pdfImage?: any }} [img] product photo for HTML (src) / PDF (embedded image)
+ */
+export function literatureSheet(lit, img = {}) {
+  const f = (t) => fillText(t, lit);
+  const listRows = (items) => items.map((t, k) => ({ c: [String(k + 1), f(t)] }));
+  const listCols = (label) => [
+    { label: 'No.', w: 0.06, align: 'c' },
+    { label, w: 0.94 },
+  ];
+  const sections = [
+    {
+      type: 'info',
+      title: '1. PUMP SET INFORMATION',
+      rows: [
+        ['System', lit.title || '–'],
+        ['Project', '@projectName'],
+        ['Client', '@client'],
+        ['Consultant', '@consultant'],
+        ['Configuration', `${lit.config || '–'}${lit.config ? `  (${configText(lit.config)})` : ''}`],
+        ['Brand', titleCase(lit.brand) || '–'],
+        ['Pump Model (Type)', `${lit.model || '–'}${lit.pumpType ? ` (${lit.pumpType})` : ''}`],
+        ...(lit.motor ? [['Motor', lit.motor]] : []),
+        ...(lit.certification ? [['Certification', lit.certification]] : []),
+      ],
+    },
+    {
+      type: 'grid',
+      title: '2. DUTY POINT',
+      columns: [
+        { label: 'Duty', w: 0.4 },
+        { label: 'Flow (L/s)', w: 0.2, align: 'c' },
+        { label: 'Head (m)', w: 0.2, align: 'c' },
+        { label: 'Head (bar)', w: 0.2, align: 'c' },
+      ],
+      rows: [
+        { c: ['Requested duty (consultant specification)', lit.reqFlow || '–', lit.reqHead || '–', lit.reqHead ? (Number(lit.reqHead) / 10.197).toFixed(2) : '–'] },
+        { c: ['Proposed duty (selected pump)', lit.propFlow || '–', lit.propHead || '–', lit.propHead ? (Number(lit.propHead) / 10.197).toFixed(2) : '–'], bold: true },
+      ],
+    },
+  ];
+  let n = 3;
+  const moc = (lit.moc || []).filter((m) => m.k || m.v);
+  if (moc.length)
+    sections.push({
+      type: 'grid',
+      title: `${n++}. MATERIAL OF CONSTRUCTION`,
+      columns: [
+        { label: 'No.', w: 0.06, align: 'c' },
+        { label: 'Component', w: 0.34 },
+        { label: 'Material', w: 0.6 },
+      ],
+      rows: moc.map((m, k) => ({ c: [String(k + 1), String(m.k || '').toUpperCase(), m.v] })),
+    });
+  const control = lines(lit.control);
+  if (control.length) sections.push({ type: 'grid', title: `${n++}. CONTROL FEATURES`, columns: listCols('Feature'), rows: listRows(control) });
+  const mech = lines(lit.mechanical);
+  if (mech.length) sections.push({ type: 'grid', title: `${n++}. MECHANICAL FEATURES`, columns: listCols('Feature'), rows: listRows(mech) });
+  const logic = lines(lit.logic);
+  if (logic.length) sections.push({ type: 'grid', title: `${n++}. LOGIC OF OPERATION`, columns: listCols('Description'), rows: listRows(logic) });
+  if (lit.image && (img.imageSrc || img.pdfImage)) sections.push({ type: 'image', title: `${n++}. PRODUCT IMAGE`, src: img.imageSrc, pdfImage: img.pdfImage });
+  if (lit.scope) {
+    sections.push({ type: 'result', text: `Scope of supply: ${f(lit.scope)}` });
+  }
+  return {
+    docTitle: `TECHNICAL LITERATURE – ${String(lit.title || '').toUpperCase()}`,
+    sheetLabel: 'TECHNICAL LITERATURE',
+    calcType: 'Technical Literature',
+    tag: lit.tag || '–',
+    service: lit.title,
+    sections,
+  };
 }

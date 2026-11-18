@@ -51,7 +51,8 @@ export function StoreProvider({ children }) {
   const [duties, setDuties] = useState(() => saved?.duties || []);
   const [inputs, setInputs] = useState(() => mergeInputs(saved?.inputs));
   const [schedule, setSchedule] = useState(() => ({ ...DEFAULT_SCHEDULE(), ...(saved?.schedule || {}) }));
-  const [theme, setThemeState] = useState(() => saved?.theme || 'light');
+  // v3 design: template dark look is the default (older saved 'theme' is ignored)
+  const [theme, setThemeState] = useState(() => saved?.uiTheme || 'dark');
   const [literature, setLiterature] = useState(() => saved?.literature || []);
   const [files, setFiles] = useState({}); // entryId -> [{id,name,size,pages,bytes}]
   const [logo, setLogo] = useState(saved?.logo || null); // {dataUrl,type,name}
@@ -59,7 +60,7 @@ export function StoreProvider({ children }) {
 
   useEffect(() => {
     try {
-      localStorage.setItem(KEY, JSON.stringify({ project, entries, duties, inputs, logo, schedule, theme, literature }));
+      localStorage.setItem(KEY, JSON.stringify({ project, entries, duties, inputs, logo, schedule, uiTheme: theme, literature }));
     } catch {
       /* quota – ignore */
     }

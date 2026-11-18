@@ -3,7 +3,8 @@ import { BookOpen, FilePlus2, Copy, Trash2, Download, Eye, ImagePlus, X, Refresh
 import { useStore } from '../../store.jsx';
 import { Card, Field, TextField, SelectField, downloadBytes, safeName } from '../../components/ui.jsx';
 import { FileSlot } from '../../components/FileSlot.jsx';
-import { LIT_TEMPLATES, fillText, lines, parseDuty, dutyText, configText } from '../../lib/literature.js';
+import { LIT_TEMPLATES, fillText, lines, parseDuty, dutyText, configText, literatureSheet } from '../../lib/literature.js';
+import { SheetHtml } from '../../components/SheetPreview.jsx';
 import { buildLiteraturePdf } from '../../lib/pdf/literaturePdf.js';
 import { SECTION_CATEGORIES } from '../../lib/calcs/index.js';
 
@@ -18,7 +19,7 @@ export function LiteratureTab() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="flex items-center gap-2 text-xl font-semibold text-slate-50">
+        <h1 className="flex items-center gap-2 font-display text-2xl font-bold tracking-tight text-slate-50">
           <BookOpen className="text-brand-400" size={22} /> Technical Literature Builder
         </h1>
         <p className="mt-1 max-w-3xl text-sm text-slate-400">
@@ -99,6 +100,7 @@ function Editor({ lit, onSelect }) {
       propHead: d.headM != null ? d.headM.toFixed(1) : lit.propHead,
       model: d.model || lit.model,
       brand: d.brand ? d.brand.toUpperCase() : lit.brand,
+      tag: d.tag || lit.tag,
     });
     notify(`Filled from calculator ${d.tag}`);
   };
@@ -179,6 +181,7 @@ function Editor({ lit, onSelect }) {
         <Card title="System & Pump" icon={BookOpen}>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <TextField label="System (title)" value={lit.title} onChange={(v) => set({ title: v })} className="sm:col-span-2" />
+            <TextField label="Equipment tag" value={lit.tag} onChange={(v) => set({ tag: v })} placeholder="e.g. TPS-01" />
             <SelectField label="Submittal section" value={lit.category} onChange={(v) => set({ category: v })} options={Object.entries(SECTION_CATEGORIES).map(([value, label]) => ({ value, label }))} />
             <TextField label="Configuration" value={lit.config} onChange={(v) => set({ config: v })} hint={configText(lit.config)} />
             <TextField label="Brand" value={lit.brand} onChange={(v) => set({ brand: v })} />
@@ -237,11 +240,7 @@ function Editor({ lit, onSelect }) {
         <Card title="Product Photo, Datasheet & Drawing" icon={ImagePlus}>
           <div className="grid gap-4 md:grid-cols-2">
             <ProductImage lit={lit} set={set} />
-            <div className="space-y-3">
-              <label className="flex items-center gap-2 text-sm text-slate-300">
-                <input type="checkbox" className="accent-brand-500" checked={lit.cover !== false} onChange={(e) => set({ cover: e.target.checked })} /> Include cover page with title &amp; duty
-              </label>
-            </div>
+            <p className="self-center text-xs text-slate-400">The literature uses the same header, title bar, tables and signature block as the hydraulic calculation sheets. A product photo (optional) is shown in its own “Product Image” section.</p>
           </div>
           <div className="mt-4 grid gap-4 md:grid-cols-2">
             <div>
@@ -257,7 +256,7 @@ function Editor({ lit, onSelect }) {
         </Card>
       </div>
 
-      <LivePreview lit={lit} make={make} />
+      <LivePreview lit={lit} project={project} />
     </div>
   );
 }
@@ -299,7 +298,7 @@ function ProductImage({ lit, set }) {
   };
   return (
     <div>
-      <div className="lbl">Product photo (faded background, as in the literature)</div>
+      <div className="lbl">Product photo (optional)</div>
       <div className="flex items-center gap-3">
         <div className="flex h-24 w-32 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-dashed border-line bg-ink-950">
           {lit.image ? <img src={lit.image} alt="Product" className="h-full w-full object-contain" /> : <ImagePlus className="text-slate-500" size={26} />}
@@ -321,51 +320,27 @@ function ProductImage({ lit, set }) {
   );
 }
 
-function LivePreview({ lit, make }) {
-  const [url, setUrl] = useState(null);
-  const [busy, setBusy] = useState(false);
+function LivePreview({ lit, project }) {
+  const sheet = useMemo(() => literatureSheet(lit, { imageSrc: lit.image }), [lit]);
+  const boxRef = useRef(null);
+  const [scale, setScale] = useState(0.5);
   useEffect(() => {
-    let alive = true;
-    let made = null;
-    setBusy(true);
-    const t = setTimeout(async () => {
-      try {
-        const { bytes } = await make(false);
-        if (!alive) return;
-        made = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
-        setUrl((old) => {
-          if (old) URL.revokeObjectURL(old);
-          return made;
-        });
-      } finally {
-        if (alive) setBusy(false);
-      }
-    }, 700);
-    return () => {
-      alive = false;
-      clearTimeout(t);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lit]);
+    const el = boxRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setScale(Math.min(1, (e.contentRect.width - 16) / 794)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   return (
-    <aside className="2xl:sticky 2xl:top-4 2xl:self-start">
-      <Card
-        title="Live preview"
-        icon={Eye}
-        bodyClass="p-0"
-        actions={
-          <>
-            {busy && <LoaderCircle size={14} className="animate-spin text-brand-400" />}
-            {url && (
-              <a className="btn-ghost !py-1 text-xs" href={url} target="_blank" rel="noopener noreferrer">
-                Open
-              </a>
-            )}
-          </>
-        }
-      >
-        {url ? <iframe title="Literature preview" src={`${url}#view=FitH&toolbar=0`} className="h-[720px] w-full bg-white" /> : <div className="flex h-60 items-center justify-center text-sm text-slate-500">Generating…</div>}
-        <p className="px-3 py-2 text-[11px] text-slate-500">Preview without attachments. If your browser shows a blank panel (e.g. on phones), use “Open”.</p>
+    <aside className="2xl:sticky 2xl:top-24 2xl:self-start">
+      <Card title="Live preview" icon={Eye} bodyClass="p-0">
+        <div ref={boxRef} className="max-h-[760px] overflow-auto rounded-b-2xl bg-slate-500/20 p-2">
+          <div style={{ width: 794 * scale, height: 'auto' }}>
+            <div style={{ transform: `scale(${scale})`, transformOrigin: 'top left', width: 794 }}>
+              <SheetHtml sheet={sheet} project={project} />
+            </div>
+          </div>
+        </div>
       </Card>
     </aside>
   );
