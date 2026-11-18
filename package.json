@@ -1,0 +1,28 @@
+{
+  "name": "mep-pump-submittal",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "MEP & HVAC pump engineering calculators and technical submittal PDF assembler",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node scripts/selftest.mjs",
+    "add-user": "node scripts/add-user.mjs",
+    "gen-secret": "node scripts/gen-secret.mjs",
+    "preview:auth": "node scripts/serve-auth.mjs"
+  },
+  "dependencies": {
+    "lucide-react": "^1.75.0",
+    "pdf-lib": "^1.17.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.5",
+    "@vitejs/plugin-react": "^6.3.0",
+    "tailwindcss": "^4.3.5",
+    "vite": "^8.3.8"
+  }
+}
