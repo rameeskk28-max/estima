@@ -7,6 +7,7 @@ import { useStore } from '../../store.jsx';
 import { SECTION_CATEGORIES } from '../../lib/calcs/index.js';
 import { DEFAULT_INDEX } from '../../lib/submittalDefaults.js';
 import { compileSubmittal, countPdfPages, buildPlan, literatureFiles } from '../../lib/pdf/compile.js';
+import { compressPdf, COMPRESSION } from '../../lib/pdf/compress.js';
 import { fmt, lpsToM3h, mToBar } from '../../lib/hydraulics.js';
 import { Card, TextField, Field, downloadBytes, safeName } from '../../components/ui.jsx';
 import { SheetPreviewModal } from '../../components/SheetPreview.jsx';
@@ -319,10 +320,13 @@ function CompilePanel() {
         { project, entries, duties, files, logo: await getLogo(), schedule, literature, warranty: warrantyDoc, librarySettings: library.settings, compliance, stamp },
         setProgress,
       );
+      const original = res.bytes.length;
+      const level = library.settings.compression || 'standard';
+      res.bytes = await compressPdf(res.bytes, level, setProgress);
       const name = `${safeName(project.refNo || 'Submittal')}_Rev${safeName(project.revision || '0')}_${safeName(project.projectName || 'Project')}.pdf`;
       downloadBytes(res.bytes, name);
-      setResult({ ...res, name, size: res.bytes.length });
-      notify(`Submittal compiled – ${res.pageCount} A4 pages`);
+      setResult({ ...res, name, size: res.bytes.length, original });
+      notify(`Submittal compiled – ${res.pageCount} A4 pages, ${mb(res.bytes.length)}${res.bytes.length < original ? ` (compressed from ${mb(original)})` : ''}`);
     } catch (e) {
       console.error(e);
       notify(`Compilation failed: ${e.message}`, 'bad');
@@ -354,7 +358,8 @@ function CompilePanel() {
           </p>
         )}
         {stats.empty > 0 && <p className="mt-2 text-xs text-slate-500">{stats.empty} section(s) have no content yet – they will show “No document attached”.</p>}
-        <button className="btn-primary mt-4 w-full !py-3 text-base" onClick={compile} disabled={busy || !plan.length}>
+        <CompressionSelect />
+        <button className="btn-primary mt-3 w-full !py-3 text-base" onClick={compile} disabled={busy || !plan.length}>
           {busy ? <LoaderCircle size={18} className="animate-spin" /> : <FileDown size={18} />}
           {busy ? 'Compiling…' : 'Compile & Download Final A4 Submittal PDF'}
         </button>
@@ -366,7 +371,8 @@ function CompilePanel() {
           <p className="text-sm text-emerald-300">
             {result.name}
             <span className="block text-xs text-slate-400">
-              {result.pageCount} pages · {(result.size / 1024 / 1024).toFixed(2)} MB
+              {result.pageCount} pages · {mb(result.size)}
+              {result.original > result.size * 1.01 && ` (compressed from ${mb(result.original)}, −${Math.round((1 - result.size / result.original) * 100)}%)`}
             </span>
           </p>
           <button className="btn-secondary mt-2 w-full text-xs" onClick={() => downloadBytes(result.bytes, result.name)}>
@@ -411,3 +417,23 @@ const Stat = ({ label, value }) => (
     <div className="text-[10px] uppercase tracking-wide text-slate-400">{label}</div>
   </div>
 );
+
+const mb = (n) => `${(n / 1024 / 1024).toFixed(2)} MB`;
+
+/** File-size option for the final submittal (saved with the Document Library defaults). */
+export function CompressionSelect() {
+  const { library, setLibrarySettings } = useStore();
+  return (
+    <label className="mt-4 block text-xs text-slate-400">
+      <span className="mb-1 block font-semibold uppercase tracking-wide">Compress final PDF</span>
+      <select className="field !py-1.5 text-sm" value={library.settings.compression || 'standard'} onChange={(e) => setLibrarySettings({ compression: e.target.value })}>
+        {Object.entries(COMPRESSION).map(([k, c]) => (
+          <option key={k} value={k}>
+            {c.label}
+          </option>
+        ))}
+      </select>
+      <span className="mt-1 block text-[11px] text-slate-500">Removes hidden metadata and duplicate fonts/images; Standard/Strong also reduce large photos and scans.</span>
+    </label>
+  );
+}

@@ -7,6 +7,8 @@ import { parseQuote, extractItems } from '../../lib/quote/parse.js';
 import { generateFromQuote, systemName, tagFrom, equipmentText, matchModel, LIBRARY_DOCS, warrantySheet } from '../../lib/quote/generate.js';
 import { LIT_TEMPLATES } from '../../lib/literature.js';
 import { compileSubmittal } from '../../lib/pdf/compile.js';
+import { compressPdf } from '../../lib/pdf/compress.js';
+import { CompressionSelect } from '../submittal/SubmittalBuilder.jsx';
 import { readBackup } from '../../lib/backup.js';
 import { displayName } from '../../lib/cloud.js';
 import { SheetPreviewModal } from '../../components/SheetPreview.jsx';
@@ -113,6 +115,7 @@ export function QuoteGenerator({ go }) {
     setBusy('Compiling…');
     try {
       const res = await compileSubmittal({ project, entries, duties, files, logo: await getLogo(), schedule, literature, warranty: warrantyDoc, librarySettings: library.settings, compliance, stamp }, setBusy);
+      res.bytes = await compressPdf(res.bytes, library.settings.compression || 'standard', setBusy);
       downloadBytes(res.bytes, `${safeName(project.refNo || 'Submittal')}_Rev${safeName(project.revision || '0')}_${safeName(project.projectName || 'Project')}.pdf`);
       notify(res.warnings.length ? `${res.pageCount} pages – ${res.warnings.length} warning(s), see Submittal Package` : `Submittal compiled – ${res.pageCount} A4 pages`, res.warnings.length ? 'bad' : 'ok');
     } catch (e) {
@@ -300,6 +303,11 @@ export function QuoteGenerator({ go }) {
                 'Creates the project header, pump schedule, one technical literature per item and the full index.'
               )}
             </div>
+            {generated && (
+              <div className="w-full sm:w-72 [&>label]:mt-0">
+                <CompressionSelect />
+              </div>
+            )}
             <div className="ml-auto flex flex-wrap gap-2">
               {generated && (
                 <>

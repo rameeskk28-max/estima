@@ -1,7 +1,7 @@
 // Node self-test: runs every calculator, renders calc sheets and compiles a full
 // submittal with sample attachments (portrait, landscape, rotated, corrupt).
 import { writeFileSync, mkdirSync } from 'node:fs';
-import { PDFDocument, StandardFonts, rgb, degrees } from 'pdf-lib';
+import { PDFDocument, StandardFonts, rgb, degrees, PDFName } from 'pdf-lib';
 import { CALCULATORS } from '../src/lib/calcs/index.js';
 import { buildCalcSheetPdf } from '../src/lib/pdf/calcSheet.js';
 import { compileSubmittal } from '../src/lib/pdf/compile.js';
@@ -177,6 +177,28 @@ import { buildCompliancePdf } from '../src/lib/compliance/compliancePdf.js';
   const ents = [{ id: 'c1', title: 'TECHNICAL COMPLIANCE STATEMENT', kind: 'compliance' }];
   const res2 = await compileSubmittal({ project, entries: ents, duties: [], files: {}, logo, compliance: { ...sp, specNo: '221123' } });
   assert(res2.pageCount >= 2, `compliance statement inserted into submittal (${res2.pageCount} pages)`);
+}
+
+// Final submittal compression (lossless part; image re-encoding needs a browser canvas)
+import { compressPdf } from '../src/lib/pdf/compress.js';
+{
+  const src = await PDFDocument.create();
+  const f = await src.embedFont(StandardFonts.Helvetica);
+  for (let i = 0; i < 3; i++) src.addPage().drawText('Page ' + i, { x: 50, y: 700, font: f });
+  const one = await src.save();
+  const big = await PDFDocument.create();
+  for (let k = 0; k < 4; k++) {
+    const d = await PDFDocument.load(one);
+    const meta = d.context.stream('<x:xmpmeta>' + 'x'.repeat(40000) + '</x:xmpmeta>', { Type: 'Metadata', Subtype: 'XML' });
+    const ref = d.context.register(meta);
+    d.getPages().forEach((p) => p.node.set(PDFName.of('Metadata'), ref));
+    for (const p of await big.copyPages(d, d.getPageIndices())) big.addPage(p);
+  }
+  const raw = await big.save({ useObjectStreams: false });
+  const small = await compressPdf(raw, 'standard');
+  const back = await PDFDocument.load(small);
+  assert(back.getPageCount() === 12 && small.length < raw.length * 0.3, `compression removes copied metadata (${raw.length} -> ${small.length} bytes, 12 pages kept)`);
+  assert((await compressPdf(raw, 'off')) === raw, 'compression off returns the original');
 }
 
 if (failures) { console.error(`${failures} failure(s)`); process.exit(1); }
