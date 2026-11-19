@@ -9,6 +9,7 @@ import { RepliesTab } from './modules/replies/RepliesTab.jsx';
 import { Home, FOLDERS, CALC_ITEMS, useReveal } from './modules/home/Home.jsx';
 import { TOOL_ITEMS, ToolPage, ToolsFolder } from './modules/tools/ToolsTab.jsx';
 import { QUOTE_ITEMS, QuoteGenerator, DocumentLibrary } from './modules/quote/QuoteTab.jsx';
+import { ComplianceTab } from './modules/quote/ComplianceTab.jsx';
 
 const SUB = {
   calc: { items: CALC_ITEMS, short: (c) => c.label.replace(' Pump Set', '').replace('Sump / Sewage', 'Sump') },
@@ -27,7 +28,7 @@ function parseRoute() {
   const [folder, item] = r.split('/');
   if (folder === 'calc') return { folder: 'calc', item: CALC_PAGES[item] ? item : null };
   if (folder === 'tools') return { folder: 'tools', item: TOOL_ITEMS.some((t) => t.key === item) ? item : null };
-  if (folder === 'quote') return { folder: 'quote', item: item === 'library' ? 'library' : 'generate' };
+  if (folder === 'quote') return { folder: 'quote', item: ['library', 'compliance'].includes(item) ? item : 'generate' };
   if (['schedule', 'literature', 'submittal', 'replies'].includes(folder)) return { folder, item: null };
   return { folder: 'home', item: null };
 }
@@ -241,7 +242,7 @@ function FolderPage({ route, go }) {
           </div>
         )}
       </div>
-      {route.folder === 'quote' ? route.item === 'library' ? <DocumentLibrary /> : <QuoteGenerator go={go} /> : route.folder === 'tools' ? route.item ? <ToolPage key={route.item} toolKey={route.item} /> : <ToolsFolder go={go} /> : Page ? <Page /> : <CalcFolder go={go} />}
+      {route.folder === 'quote' ? route.item === 'library' ? <DocumentLibrary /> : route.item === 'compliance' ? <ComplianceTab /> : <QuoteGenerator go={go} /> : route.folder === 'tools' ? route.item ? <ToolPage key={route.item} toolKey={route.item} /> : <ToolsFolder go={go} /> : Page ? <Page /> : <CalcFolder go={go} />}
     </div>
   );
 }

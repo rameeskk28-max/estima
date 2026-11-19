@@ -5,6 +5,7 @@ import { renderManualSchedule } from './schedulePdf.js';
 import { renderLiterature, embedImage, dataUrlToImage } from './literaturePdf.js';
 import { literatureLabel } from '../literature.js';
 import { warrantySheet, DEFAULT_LIBRARY } from '../quote/generate.js';
+import { renderCompliance } from '../compliance/compliancePdf.js';
 import { fmt, lpsToM3h, mToBar } from '../hydraulics.js';
 import { SECTION_CATEGORIES } from '../calcs/engine.js';
 
@@ -20,22 +21,22 @@ export function literatureFiles(l, files, kind) {
   return [...(files[`lit-${l.id}-${kind}`] || []), ...(l.libModel ? files[`libm-${l.libModel}-${kind}`] || [] : [])];
 }
 
-export function buildPlan(entries, duties, files, literature = []) {
+export function buildPlan(entries, duties, files, literature = [], opts = {}) {
   const included = entries.filter((e) => e.include !== false);
   return included.map((e, idx) => {
     const items = [];
     if (e.kind === 'schedule') items.push({ type: 'schedule', label: 'Pump & Equipment Schedule' });
     if (e.kind === 'warranty') items.push({ type: 'warranty', label: 'Certificate of Warranty – Draft' });
+    if (e.kind === 'compliance' && opts.compliance?.rows?.length) items.push({ type: 'compliance', label: `Technical Compliance Statement${opts.compliance.specNo ? ` – Section ${opts.compliance.specNo}` : ''}` });
     if (e.kind === 'technical') {
       const lits = e.litId ? literature.filter((l) => l.id === e.litId) : literature.filter((l) => l.category === e.category);
       // Order: technical literature → pump datasheets & curves → catalogues → calculation sheets → drawings → other uploads
       lits.forEach((l) => items.push({ type: 'literature', lit: l, label: literatureLabel(l) }));
       lits.forEach((l) => literatureFiles(l, files, 'datasheet').forEach((f) => items.push({ type: 'pdf', file: f, label: `Pump Datasheet & Curves – ${strip(f.name)}` })));
       lits.forEach((l) => literatureFiles(l, files, 'catalogue').forEach((f) => items.push({ type: 'pdf', file: f, label: `Catalogue – ${strip(f.name)}` })));
-      if (!e.litId)
-        duties
-          .filter((d) => d.category === e.category && d.sheet)
-          .forEach((d) => items.push({ type: 'calc', duty: d, label: `Calculation Sheet – ${d.tag} (${d.calcType})` }));
+      ;(e.litId ? duties.filter((d) => (e.dutyIds || []).includes(d.id) && d.sheet) : duties.filter((d) => d.category === e.category && d.sheet)).forEach((d) =>
+        items.push({ type: 'calc', duty: d, label: `Hydraulic Calculation – ${d.tag} (${d.calcType})` }),
+      );
       lits.forEach((l) => literatureFiles(l, files, 'drawing').forEach((f) => items.push({ type: 'pdf', file: f, label: `Drawing – ${strip(f.name)}` })));
     }
     if (e.libSlot) (files[e.libSlot] || []).forEach((f) => items.push({ type: 'pdf', file: f, label: strip(f.name) }));
@@ -49,7 +50,7 @@ export function buildPlan(entries, duties, files, literature = []) {
  * @param {{project: object, entries: object[], duties: object[], files: Record<string, {name:string, bytes:ArrayBuffer|Uint8Array}[]>, logo?: {bytes:ArrayBuffer, type:string}}} input
  * @param {(msg: string) => void} [onProgress]
  */
-export async function compileSubmittal({ project = {}, entries = [], duties = [], files = {}, logo, schedule, literature = [], warranty, librarySettings }, onProgress = () => {}) {
+export async function compileSubmittal({ project = {}, entries = [], duties = [], files = {}, logo, schedule, literature = [], warranty, librarySettings, compliance, stamp }, onProgress = () => {}) {
   const doc = await PDFDocument.create();
   const fonts = await loadFonts(doc);
   const warnings = [];
@@ -68,7 +69,7 @@ export async function compileSubmittal({ project = {}, entries = [], duties = []
     }
   }
 
-  const plan = buildPlan(entries, duties, files, literature);
+  const plan = buildPlan(entries, duties, files, literature, { compliance });
   const pageMeta = []; // per page: { section, footer: boolean }
   const track = (pages, section, footer = true) => pages.forEach((p) => pageMeta.push({ page: p, section, footer }));
 
@@ -99,6 +100,9 @@ export async function compileSubmittal({ project = {}, entries = [], duties = []
       if (it.type === 'schedule') {
         const pages = schedule?.rows?.length ? renderManualSchedule(doc, fonts, schedule, project) : drawSchedule(doc, fonts, project, duties);
         track(pages, label);
+      } else if (it.type === 'compliance') {
+        const stampImg = stamp ? await embedImage(doc, dataUrlToImage(stamp)) : null;
+        track(await renderCompliance(doc, compliance, project, { logoImg, stampImg }), label);
       } else if (it.type === 'warranty') {
         const { pages } = await renderCalcSheet(doc, fonts, warrantySheet(project, warranty || {}, librarySettings || DEFAULT_LIBRARY().settings), project, logoImg);
         track(pages, label);

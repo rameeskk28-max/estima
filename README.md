@@ -86,3 +86,31 @@ See **DEPLOY-NETLIFY.md** – Netlify builds from the GitHub `main` branch autom
 
 ---
 Designed & developed by [Ramees](https://www.linkedin.com/in/rameeskk)
+
+## Technical Compliance Statement (Quote to Submittal → Compliance Statement)
+
+Upload the project specification (text PDF or scanned PDF – scanned pages are read with in-browser OCR).
+Each numbered/lettered clause (1.1.1, 2.3 A, …) becomes one row with the specification text filled in;
+PART 1/2/3 and sub-headings become green bars. Enter the Greenland remarks and status per row
+(quick-fill chips, "From margin notes", "Pending → Complied"), then Preview / Download. The statement is
+also inserted automatically in the submittal section **TECHNICAL COMPLIANCE STATEMENT**.
+
+## Cloud Document Library (Supabase)
+
+Library documents (company documents, pump datasheets, drawings, catalogues, models and defaults) can be
+saved online and shared by every signed-in team member.
+
+1. In the Supabase dashboard → **SQL Editor**, run `supabase/migrations/20261119000000_document_library.sql`
+   (or `supabase db push` if the project is linked through the GitHub integration). It creates the
+   `library_state` and `library_files` tables, a private `library` storage bucket and the access policies
+   (signed-in users only).
+2. **Authentication → Users → Add user** for each team member (email + password). Under
+   **Authentication → Sign In / Providers**, turn **off** "Allow new users to sign up" so only invited users get in.
+3. Netlify → **Site configuration → Environment variables**, add
+   `VITE_SUPABASE_URL` (Project URL) and `VITE_SUPABASE_ANON_KEY` (anon / publishable key) from
+   Supabase → Project Settings → API, then **Deploys → Trigger deploy**.
+4. Open **Quote to Submittal → Document Library** and sign in. The first sign-in on a computer uploads
+   what is already in that browser; after that the cloud copy is the master and every change is saved
+   automatically.
+
+Without these variables the site still works and keeps the library in the browser (backup export/import).

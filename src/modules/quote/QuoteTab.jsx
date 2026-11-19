@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { FileInput, Library, Upload, LoaderCircle, CheckCircle2, XCircle, Wand2, FileDown, ArrowRight, Plus, Trash2, Search, HardDriveDownload, HardDriveUpload, Settings2, Package, Building2, ShieldCheck, FileText } from 'lucide-react';
+import { FileInput, Library, ClipboardCheck, Upload, LoaderCircle, CheckCircle2, XCircle, Wand2, FileDown, ArrowRight, Plus, Trash2, Search, HardDriveDownload, Cloud, CloudOff, LogIn, LogOut, RefreshCw, HardDriveUpload, Settings2, Package, Building2, ShieldCheck, FileText } from 'lucide-react';
 import { useStore } from '../../store.jsx';
 import { Card, Field, TextField, SelectField, downloadBytes, safeName } from '../../components/ui.jsx';
 import { FileSlot } from '../../components/FileSlot.jsx';
@@ -12,6 +12,7 @@ import { SheetPreviewModal } from '../../components/SheetPreview.jsx';
 
 export const QUOTE_ITEMS = [
   { key: 'generate', label: 'Quote → Submittal', icon: FileInput, desc: 'Upload a quotation and generate the submittal' },
+  { key: 'compliance', label: 'Compliance Statement', icon: ClipboardCheck, desc: 'Specification clauses → technical compliance statement' },
   { key: 'library', label: 'Document Library', icon: Library, desc: 'Company documents, pump datasheets & drawings saved once' },
 ];
 
@@ -24,10 +25,21 @@ async function loadPdfjs() {
 
 const ok = (b) => (b ? <CheckCircle2 size={15} className="shrink-0 text-emerald-400" /> : <XCircle size={15} className="shrink-0 text-red-400" />);
 const n2 = (x) => (x == null ? '' : String(Math.round(x * 100) / 100));
+const SCHEDULE_REQUIRED = ['eff', 'kw', 'rpm', 'phase', 'motorClass', 'certs', 'housing', 'impeller'];
+const missing = (it) => SCHEDULE_REQUIRED.filter((k) => it[k] === '' || it[k] == null);
+/** Highlights an empty field. */
+const Miss = ({ v, children }) => <div className={v === '' || v == null ? 'rounded-lg ring-1 ring-amber-500/60 ring-offset-2 ring-offset-transparent' : ''}>{children}</div>;
+const CAT_OF = { transfer: 'transfer', 'booster-vfd': 'booster', 'booster-fixed': 'booster', circulation: 'circulation', sump: 'sump' };
+/** Pre-select a saved calculation when exactly one matches the item's category. */
+function autoDuty(duties, it) {
+  const m = duties.filter((d) => d.kind === 'pump' && d.sheet && d.category === CAT_OF[it.template]);
+  return m.length === 1 ? m[0].id : '';
+}
 
 /* ================================================================== */
 export function QuoteGenerator({ go }) {
-  const { quoteDraft: d, setQuoteDraft, library, files, applyQuote, notify, project, entries, duties, literature, getLogo, schedule, warrantyDoc, addModel } = useStore();
+  const { quoteDraft: d, setQuoteDraft, library, files, applyQuote, notify, project, entries, duties, literature, getLogo, schedule, warrantyDoc, addModel, compliance, stamp } = useStore();
+  const dutiesById = Object.fromEntries(duties.map((x) => [x.id, x]));
   const [busy, setBusy] = useState('');
   const [generated, setGenerated] = useState(false);
   const [drag, setDrag] = useState(false);
@@ -45,7 +57,19 @@ export function QuoteGenerator({ go }) {
       setQuoteDraft({
         fileName: file.name,
         header: q.header,
-        items: q.items.map((it) => ({ ...it, include: true, system: systemName(it), tag: tagFrom(it.title), reqFlow: '', reqHead: '' })),
+        items: q.items.map((it) => ({
+          ...it,
+          include: true,
+          system: systemName(it),
+          tag: tagFrom(it.title),
+          reqFlow: '',
+          reqHead: '',
+          eff: '',
+          certs: S.certs?.[it.template] ?? '',
+          motorClass: S.motorClass || '',
+          starter: it.vfd ? 'VFD' : 'DOL',
+          dutyId: autoDuty(duties, it),
+        })),
         form: {
           projectName: '',
           client: '',
@@ -78,7 +102,7 @@ export function QuoteGenerator({ go }) {
     const f = d.form;
     if (!f.projectName.trim()) return notify('Enter the project name first', 'bad');
     if (entries.length && !confirm('Generating replaces the current submittal index, pump schedule, project header and quote literature. Continue?')) return;
-    const gen = generateFromQuote(d, f, library);
+    const gen = generateFromQuote(d, f, library, dutiesById);
     applyQuote(gen);
     setGenerated(true);
     notify(`Submittal generated – ${gen.entries.length} sections`);
@@ -87,7 +111,7 @@ export function QuoteGenerator({ go }) {
   const compileNow = async () => {
     setBusy('Compiling…');
     try {
-      const res = await compileSubmittal({ project, entries, duties, files, logo: await getLogo(), schedule, literature, warranty: warrantyDoc, librarySettings: library.settings }, setBusy);
+      const res = await compileSubmittal({ project, entries, duties, files, logo: await getLogo(), schedule, literature, warranty: warrantyDoc, librarySettings: library.settings, compliance, stamp }, setBusy);
       downloadBytes(res.bytes, `${safeName(project.refNo || 'Submittal')}_Rev${safeName(project.revision || '0')}_${safeName(project.projectName || 'Project')}.pdf`);
       notify(res.warnings.length ? `${res.pageCount} pages – ${res.warnings.length} warning(s), see Submittal Package` : `Submittal compiled – ${res.pageCount} A4 pages`, res.warnings.length ? 'bad' : 'ok');
     } catch (e) {
@@ -98,7 +122,6 @@ export function QuoteGenerator({ go }) {
   };
 
   const libStatus = LIBRARY_DOCS.map((doc) => ({ ...doc, n: (files[doc.key] || []).length }));
-  const compliance = entries.find((e) => e.title === 'TECHNICAL COMPLIANCE STATEMENT');
 
   return (
     <div className="space-y-4">
@@ -193,8 +216,39 @@ export function QuoteGenerator({ go }) {
                     <TextField label="Proposed head (m)" value={n2(it.headM)} onChange={(v) => setItem(k, { headM: Number(v) || 0 })} />
                     <TextField label="Specified flow (L/s)" value={it.reqFlow} onChange={(v) => setItem(k, { reqFlow: v })} placeholder="consultant" />
                     <TextField label="Specified head (m)" value={it.reqHead} onChange={(v) => setItem(k, { reqHead: v })} placeholder="consultant" />
-                    <TextField label="Motor kW / phase" value={`${it.kw ?? ''}${it.phase ? ` / ${it.phase} ph` : ''}`} onChange={() => {}} disabled />
-                    <TextField label="MOC" value={[it.housing, it.impeller].filter(Boolean).join(' / ')} onChange={() => {}} disabled />
+                  </div>
+                  <div className="mt-3 rounded-xl border border-line/70 p-3">
+                    <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                      Pump schedule fields
+                      {missing(it).length > 0 && <span className="rounded-full bg-amber-500/15 px-2 py-0.5 normal-case tracking-normal text-amber-400">{missing(it).length} missing – fill manually</span>}
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
+                      <Miss v={it.eff}><TextField label="Efficiency %" value={it.eff} onChange={(v) => setItem(k, { eff: v })} placeholder="e.g. 68.6" /></Miss>
+                      <Miss v={it.kw}><TextField label="Power kW" value={it.kw ?? ''} onChange={(v) => setItem(k, { kw: v === '' ? null : Number(v) || v })} /></Miss>
+                      <Miss v={it.rpm}><TextField label="Speed rpm" value={it.rpm ?? ''} onChange={(v) => setItem(k, { rpm: v })} /></Miss>
+                      <Miss v={it.phase}><TextField label="Phase" value={it.phase ?? ''} onChange={(v) => setItem(k, { phase: v })} /></Miss>
+                      <Miss v={it.motorClass}><TextField label="Motor IE class" value={it.motorClass} onChange={(v) => setItem(k, { motorClass: v })} /></Miss>
+                      <Miss v={it.certs}><TextField label="Certificates" value={it.certs} onChange={(v) => setItem(k, { certs: v })} placeholder="WRAS, ACS / NA" /></Miss>
+                      <TextField label="Pressure vessel (L)" value={it.vessel} onChange={(v) => setItem(k, { vessel: v })} placeholder="NA" />
+                      <TextField label="Suction × discharge" value={it.header} onChange={(v) => setItem(k, { header: v })} placeholder="NA" />
+                      <SelectField label="Starter" value={it.starter} onChange={(v) => setItem(k, { starter: v })} options={['DOL', 'VFD', 'Star-Delta', 'Soft starter'].map((x) => ({ value: x, label: x }))} />
+                      <Miss v={it.housing}><TextField label="Casing / housing" value={it.housing} onChange={(v) => setItem(k, { housing: v })} /></Miss>
+                      <Miss v={it.impeller}><TextField label="Impeller" value={it.impeller} onChange={(v) => setItem(k, { impeller: v })} /></Miss>
+                      <TextField label="Shaft" value={it.shaft} onChange={(v) => setItem(k, { shaft: v })} />
+                      <Field label="Hydraulic calculation" className="col-span-2 xl:col-span-4">
+                        <select className="field" value={it.dutyId || ''} onChange={(e) => setItem(k, { dutyId: e.target.value })}>
+                          <option value="">{duties.length ? 'None – no calculation sheet' : 'No saved calculations (Calculations folder → Save to Submittal)'}</option>
+                          {duties
+                            .filter((d) => d.sheet)
+                            .map((d) => (
+                              <option key={d.id} value={d.id}>
+                                {d.tag} – {d.calcType}
+                                {d.flowLps != null ? ` – ${n2(d.flowLps)} L/s @ ${n2(d.headM)} m` : ''}
+                              </option>
+                            ))}
+                        </select>
+                      </Field>
+                    </div>
                   </div>
                   <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
                     <span className="flex items-center gap-1.5 text-slate-300">{ok(!!m)} Library model {m ? <b className="text-slate-50">{m.model}</b> : 'not found'}</span>
@@ -262,9 +316,14 @@ export function QuoteGenerator({ go }) {
             </div>
           </div>
 
-          {generated && compliance && (
-            <Card title="Technical Compliance Statement (per project)" icon={FileText}>
-              <FileSlot slotId={compliance.id} label="Upload the Technical Compliance Statement PDF" />
+          {generated && (
+            <Card title="Technical Compliance Statement" icon={ClipboardCheck}>
+              <p className="text-sm text-slate-300">
+                {compliance.rows.length ? `${compliance.rows.filter((r) => r.type === 'clause').length} clauses ready – inserted automatically.` : 'Not prepared yet.'}{' '}
+                <button className="text-brand-400 underline-offset-2 hover:underline" onClick={() => go('quote/compliance')}>
+                  Open Compliance Statement
+                </button>
+              </p>
             </Card>
           )}
         </>
@@ -333,6 +392,8 @@ export function DocumentLibrary() {
         </h1>
         <p className="mt-1 max-w-3xl text-sm text-slate-400">Save the documents that are the same in every submittal once. Pump datasheets, drawings and catalogues are matched to quotation items by model number.</p>
       </div>
+
+      <CloudCard />
 
       <Card title="Backup – use the library on another computer" icon={HardDriveDownload}>
         <div className="flex flex-wrap items-center gap-2">
@@ -432,5 +493,83 @@ export function DocumentLibrary() {
         </div>
       </Card>
     </div>
+  );
+}
+
+/* ================================================================== */
+function CloudCard() {
+  const { cloud, cloudSignIn, cloudSignOut, cloudSync, cloudReset, notify } = useStore();
+  const [email, setEmail] = useState('');
+  const [pw, setPw] = useState('');
+  const [busy, setBusy] = useState(false);
+  if (!cloud.configured)
+    return (
+      <Card title="Cloud library" icon={CloudOff}>
+        <p className="text-sm text-slate-400">
+          Cloud saving is not connected on this site yet – documents are kept in this browser only. Add <code className="text-brand-400">VITE_SUPABASE_URL</code> and <code className="text-brand-400">VITE_SUPABASE_ANON_KEY</code> in Netlify (see README) and redeploy.
+        </p>
+      </Card>
+    );
+  const tone = { syncing: 'text-amber-400', ok: 'text-emerald-400', error: 'text-red-400', off: 'text-slate-400' }[cloud.status];
+  if (cloud.user)
+    return (
+      <Card title="Cloud library" icon={Cloud}>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="text-sm text-slate-300">
+            Signed in as <b className="text-slate-50">{cloud.user.email}</b> – library documents are saved online and shared with your team.
+            <div className={`mt-1 flex items-center gap-1 text-xs ${tone}`}>
+              {cloud.status === 'syncing' && <LoaderCircle size={12} className="animate-spin" />} {cloud.msg || 'Ready'}
+            </div>
+          </div>
+          <div className="ml-auto flex gap-2">
+            <button className="btn-secondary" onClick={() => cloudSync()} disabled={cloud.status === 'syncing'}>
+              <RefreshCw size={15} /> Sync now
+            </button>
+            <button className="btn-ghost" onClick={cloudSignOut}>
+              <LogOut size={15} /> Sign out
+            </button>
+          </div>
+        </div>
+      </Card>
+    );
+  const submit = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      await cloudSignIn(email, pw);
+      setPw('');
+      notify('Signed in – syncing the library');
+    } catch (err) {
+      notify(err.message || 'Sign-in failed', 'bad');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Card title="Cloud library – sign in" icon={Cloud}>
+      <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
+        <p className="w-full text-sm text-slate-400">Sign in to save the library online and open it on any computer. Without signing in, documents stay in this browser only.</p>
+        <TextField label="Email" type="email" value={email} onChange={setEmail} className="min-w-[220px] flex-1" />
+        <TextField label="Password" type="password" value={pw} onChange={setPw} className="min-w-[180px] flex-1" />
+        <button className="btn-primary" type="submit" disabled={busy || !email || !pw}>
+          {busy ? <LoaderCircle size={16} className="animate-spin" /> : <LogIn size={16} />} Sign in
+        </button>
+        <button
+          type="button"
+          className="btn-ghost text-xs"
+          disabled={!email}
+          onClick={async () => {
+            try {
+              await cloudReset(email);
+              notify('Password reset email sent');
+            } catch (err) {
+              notify(err.message, 'bad');
+            }
+          }}
+        >
+          Forgot password?
+        </button>
+      </form>
+    </Card>
   );
 }

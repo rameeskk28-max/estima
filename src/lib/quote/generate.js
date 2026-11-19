@@ -83,8 +83,20 @@ export function equipmentText(items) {
  * @param {object} form project form
  * @param {{models: object[], settings: object}} library
  */
-export function generateFromQuote(quote, form, library) {
-  const items = quote.items.filter((it) => it.include !== false);
+export function generateFromQuote(quote, form, library, dutiesById = {}) {
+  // fill specified duty from a linked calculation when not typed in
+  const items = quote.items
+    .filter((it) => it.include !== false)
+    .map((it) => {
+      const d = dutiesById[it.dutyId];
+      if (!d) return it;
+      const m = String(d.specifiedDuty || '').match(/([\d.]+)\s*L\/?P?S.*?@\s*([\d.]+)\s*(BAR|M)/i);
+      return {
+        ...it,
+        reqFlow: it.reqFlow || (m ? m[1] : ''),
+        reqHead: it.reqHead || (m ? (m[3].toUpperCase() === 'BAR' ? (Number(m[2]) * 10.197).toFixed(1) : m[2]) : ''),
+      };
+    });
   const S = library.settings;
   const project = {
     projectName: form.projectName,
@@ -120,7 +132,7 @@ export function generateFromQuote(quote, form, library) {
       model: it.model,
       pumpType: it.type || base.pumpType,
       motor: it.kw ? `TEFC, IEC, ${it.kw} KW, ${phase} PHASE, ${phase === 1 ? '230V' : '400V'}, 50HZ` : base.motor,
-      certification: S.certs?.[tpl] ?? base.certification,
+      certification: it.certs ?? S.certs?.[tpl] ?? base.certification,
       reqFlow: n2(it.reqFlow),
       reqHead: n2(it.reqHead),
       propFlow: n2(it.flowLps),
@@ -153,15 +165,15 @@ export function generateFromQuote(quote, form, library) {
         model: it.model,
         type: it.type,
         moc: [it.housing && `Casing - ${it.housing}`, it.impeller && `Impeller - ${it.impeller}`, it.shaft && `Shaft - ${it.shaft}`].filter(Boolean).join(', '),
-        certs: S.certs?.[it.template] || 'NA',
-        eff: '',
+        certs: (it.certs ?? S.certs?.[it.template]) || 'NA',
+        eff: it.eff ? (String(it.eff).includes('%') ? String(it.eff) : `${it.eff}%`) : '',
         power: it.kw ? Number(it.kw).toFixed(2) : '',
         speed: it.rpm ? String(Math.round(it.rpm)) : '',
-        motorClass: S.motorClass || '',
-        vessel: it.vessel ? `${it.vessel}L` : 'NA',
+        motorClass: it.motorClass ?? S.motorClass ?? '',
+        vessel: it.vessel ? (/[a-z]/i.test(String(it.vessel)) ? String(it.vessel) : `${it.vessel}L`) : 'NA',
         header: it.header || 'NA',
         phase: it.phase ? String(it.phase) : '',
-        starter: it.vfd ? 'VFD' : 'DOL',
+        starter: it.starter || (it.vfd ? 'VFD' : 'DOL'),
       }),
     ),
   };
@@ -174,9 +186,9 @@ export function generateFromQuote(quote, form, library) {
     lib(L['lib-commercial-license']),
     lib(L['lib-authorization']),
     lib(L['lib-manufacturer-profile']),
-    { id: uid(), title: 'TECHNICAL COMPLIANCE STATEMENT', kind: 'upload', include: true },
+    { id: uid(), title: 'TECHNICAL COMPLIANCE STATEMENT', kind: 'compliance', include: true },
     { id: uid(), title: 'PUMP SCHEDULE', kind: 'schedule', include: true },
-    ...literature.map((lt, k) => ({ id: uid(), title: literatureTitle({ ...items[k], system: lt.title }), kind: 'technical', category: lt.category, litId: lt.id, include: true })),
+    ...literature.map((lt, k) => ({ id: uid(), title: literatureTitle({ ...items[k], system: lt.title }), kind: 'technical', category: lt.category, litId: lt.id, dutyIds: items[k].dutyId ? [items[k].dutyId] : [], include: true })),
     lib(L['lib-project-references']),
     lib(L['lib-project-approvals']),
     lib(L['lib-iso']),

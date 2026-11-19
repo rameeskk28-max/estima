@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { CALCULATORS } from './lib/calcs/index.js';
 import { DEFAULT_INDEX, DEFAULT_PROJECT } from './lib/submittalDefaults.js';
 import { fileStore } from './lib/fileStore.js';
@@ -9,6 +9,7 @@ import { newReply, annexureSlot, prevSlot } from './lib/replies.js';
 import { TOOLS } from './lib/tools.js';
 import { DEFAULT_LIBRARY } from './lib/quote/generate.js';
 import { makeBackup, isLibrarySlot } from './lib/backup.js';
+import * as cloud from './lib/cloud.js';
 
 const Ctx = createContext(null);
 const KEY = 'pump-submittal-v2';
@@ -31,6 +32,21 @@ function loadState() {
   }
   return null;
 }
+
+export const DEFAULT_COMPLIANCE = () => ({
+  specNo: '',
+  specName: '',
+  subtitle: '',
+  brandOffered: 'Franklin Electric Pumps',
+  supplier: 'M/S. Greenland Equipment & Machinery EST LLC',
+  rows: [],
+  keyItems: null,
+  signFor: 'For: GREENLAND EQUIPMENT & MACHINERY EST. L.L.C',
+  signName: '',
+  signLines: '',
+  showStamp: true,
+  sourceName: '',
+});
 
 const DEFAULT_SCHEDULE = () => ({ title: 'PUMP SCHEDULE', subtitle: 'WATER SUPPLY & DRAINAGE PUMPS', notes: '', rows: [] });
 
@@ -68,17 +84,25 @@ export function StoreProvider({ children }) {
   });
   const [warrantyDoc, setWarrantyDoc] = useState(() => saved?.warrantyDoc || { period: 'THREE years from the date of Initial Start', equipment: 'pump sets' });
   const [quoteDraft, setQuoteDraft] = useState(() => saved?.quoteDraft || null);
+  const [compliance, setCompliance] = useState(() => ({ ...DEFAULT_COMPLIANCE(), ...(saved?.compliance || {}) }));
   const [files, setFiles] = useState({}); // entryId -> [{id,name,size,pages,bytes}]
+  const [cloudState, setCloudState] = useState({ configured: cloud.cloudConfigured, user: null, status: 'off', msg: '' });
+  const userRef = useRef(null);
+  const filesRef = useRef(files);
+  const libraryRef = useRef(null);
+  filesRef.current = files;
+  libraryRef.current = library;
+  const pulledRef = useRef(false);
   const [logo, setLogo] = useState(saved?.logo || null); // {dataUrl,type,name}
   const [toast, setToast] = useState(null);
 
   useEffect(() => {
     try {
-      localStorage.setItem(KEY, JSON.stringify({ project, entries, duties, inputs, logo, schedule, uiTheme: theme, literature, replies, stamp, toolInputs, library, warrantyDoc, quoteDraft }));
+      localStorage.setItem(KEY, JSON.stringify({ project, entries, duties, inputs, logo, schedule, uiTheme: theme, literature, replies, stamp, toolInputs, library, warrantyDoc, quoteDraft, compliance }));
     } catch {
       /* quota – ignore */
     }
-  }, [project, entries, duties, inputs, logo, schedule, theme, literature, replies, stamp, toolInputs, library, warrantyDoc, quoteDraft]);
+  }, [project, entries, duties, inputs, logo, schedule, theme, literature, replies, stamp, toolInputs, library, warrantyDoc, quoteDraft, compliance]);
 
   useEffect(() => {
     fileStore.all().then((recs) => {
@@ -86,6 +110,85 @@ export function StoreProvider({ children }) {
       recs.sort((a, b) => a.order - b.order).forEach((r) => (map[r.entryId] ||= []).push(r));
       setFiles(map);
     });
+  }, []);
+
+  /* ---------- Cloud Document Library (Supabase) ---------- */
+  const cloudRun = useCallback(async (msg, fn) => {
+    if (msg) setCloudState((c) => ({ ...c, status: 'syncing', msg }));
+    try {
+      await fn();
+      setCloudState((c) => ({ ...c, status: 'ok', msg: `Saved to cloud ${new Date().toLocaleTimeString()}` }));
+    } catch (e) {
+      console.error(e);
+      setCloudState((c) => ({ ...c, status: 'error', msg: e.message || 'Cloud sync failed' }));
+    }
+  }, []);
+
+  /** Pull the shared library from the cloud; on this browser's first sync, local-only items are uploaded too. */
+  const cloudSync = useCallback(
+    (user = userRef.current) =>
+      user &&
+      cloudRun('Syncing library with the cloud…', async () => {
+        const firstKey = `gl-cloud-synced-${user.id}`;
+        const first = !localStorage.getItem(firstKey);
+        const remote = await cloud.pullState();
+        let lib = libraryRef.current;
+        if (remote?.data?.models) {
+          lib = { models: first ? mergeModels(remote.data.models, lib.models) : remote.data.models, settings: { ...DEFAULT_LIBRARY().settings, ...remote.data.settings } };
+          setLibrary(lib);
+        }
+        const rows = await cloud.listFiles();
+        const remoteIds = new Set(rows.map((r) => r.id));
+        const local = Object.entries(filesRef.current).filter(([k]) => isLibrarySlot(k)).flatMap(([, arr]) => arr);
+        const localIds = new Set(local.map((f) => f.id));
+        const fetched = [];
+        for (const [i, row] of rows.filter((r) => !localIds.has(r.id)).entries()) {
+          setCloudState((c) => ({ ...c, msg: `Downloading ${row.name} (${i + 1})…` }));
+          const rec = await cloud.downloadFile(row);
+          await fileStore.put(rec);
+          fetched.push(rec);
+        }
+        const extra = local.filter((f) => !remoteIds.has(f.id));
+        if (first) for (const f of extra) await cloud.uploadFile(f);
+        else for (const f of extra) await fileStore.remove(f.id);
+        const drop = first ? new Set() : new Set(extra.map((f) => f.id));
+        setFiles((m) => {
+          const n = Object.fromEntries(Object.entries(m).map(([k, arr]) => [k, arr.filter((f) => !drop.has(f.id))]));
+          for (const f of fetched) n[f.entryId] = [...(n[f.entryId] || []), f].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+          return n;
+        });
+        if (!remote?.data?.models || first) await cloud.pushState(lib);
+        localStorage.setItem(firstKey, '1');
+        pulledRef.current = true;
+      }),
+    [cloudRun],
+  );
+
+  useEffect(() => {
+    if (!cloud.cloudConfigured) return;
+    const apply = (user) => {
+      const was = userRef.current?.id;
+      userRef.current = user;
+      pulledRef.current = false;
+      setCloudState((c) => ({ ...c, user, status: user ? c.status : 'off', msg: user ? c.msg : '' }));
+      if (user && user.id !== was) cloudSync(user);
+    };
+    cloud.currentUser().then(apply);
+    return cloud.onAuth(apply);
+  }, [cloudSync]);
+
+  // push library state (models, defaults, warranty texts) after changes
+  useEffect(() => {
+    if (!userRef.current || !pulledRef.current) return;
+    const t = setTimeout(() => cloudRun('', () => cloud.pushState(library)), 1200);
+    return () => clearTimeout(t);
+  }, [library, cloudRun]);
+
+  const cloudSignIn = useCallback(async (email, pw) => {
+    await cloud.signIn(email, pw);
+  }, []);
+  const cloudSignOut = useCallback(async () => {
+    await cloud.signOut();
   }, []);
 
   const notify = useCallback((msg, tone = 'ok') => {
@@ -119,12 +222,14 @@ export function StoreProvider({ children }) {
     const withMeta = recs.map((r, i) => ({ ...r, id: uid(), entryId, order: existing.length + i + Date.now() / 1e13 }));
     setFiles((m) => ({ ...m, [entryId]: [...(m[entryId] || []), ...withMeta] }));
     for (const r of withMeta) await fileStore.put(r);
-  }, [files]);
+    if (userRef.current && isLibrarySlot(entryId)) cloudRun(`Uploading ${withMeta.length} file(s) to the cloud…`, async () => { for (const r of withMeta) await cloud.uploadFile(r); });
+  }, [files]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const removeFile = useCallback(async (entryId, fileId) => {
     setFiles((m) => ({ ...m, [entryId]: (m[entryId] || []).filter((f) => f.id !== fileId) }));
     await fileStore.remove(fileId);
-  }, []);
+    if (userRef.current && isLibrarySlot(entryId)) cloudRun('Removing from the cloud…', () => cloud.deleteFile(fileId));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const moveFile = useCallback((entryId, fileId, dir) => {
     setFiles((m) => {
@@ -136,6 +241,7 @@ export function StoreProvider({ children }) {
       list.forEach((f, k) => {
         f.order = k;
         fileStore.put(f);
+        if (userRef.current && isLibrarySlot(entryId)) cloudRun('', () => cloud.updateFileOrder(f));
       });
       return { ...m, [entryId]: list };
     });
@@ -156,6 +262,7 @@ export function StoreProvider({ children }) {
     for (const r of await fileStore.all()) if (!isLibrarySlot(r.entryId)) await fileStore.remove(r.id);
     setFiles((m) => Object.fromEntries(Object.entries(m).filter(([k]) => isLibrarySlot(k))));
     setQuoteDraft(null);
+    setCompliance(DEFAULT_COMPLIANCE());
   }, []);
 
   // Logo used in PDFs & previews: custom upload, otherwise the supplier brand logo.
@@ -256,10 +363,10 @@ export function StoreProvider({ children }) {
     (kind) =>
       makeBackup(
         kind,
-        kind === 'library' ? { library } : { project, entries, duties, inputs, logo, schedule, literature, replies, stamp, toolInputs, library, warrantyDoc, quoteDraft },
+        kind === 'library' ? { library } : { project, entries, duties, inputs, logo, schedule, literature, replies, stamp, toolInputs, library, warrantyDoc, quoteDraft, compliance },
         files,
       ),
-    [library, project, entries, duties, inputs, logo, schedule, literature, replies, stamp, toolInputs, warrantyDoc, quoteDraft, files],
+    [library, project, entries, duties, inputs, logo, schedule, literature, replies, stamp, toolInputs, warrantyDoc, quoteDraft, compliance, files],
   );
   /** Restore a backup (from readBackup). Library imports merge; workspace imports replace. */
   const importBackup = useCallback(async (b) => {
@@ -288,12 +395,14 @@ export function StoreProvider({ children }) {
       if (st.toolInputs) setToolInputs((t) => ({ ...t, ...st.toolInputs }));
       if (st.warrantyDoc) setWarrantyDoc(st.warrantyDoc);
       if ('quoteDraft' in st) setQuoteDraft(st.quoteDraft);
+      if (st.compliance) setCompliance(st.compliance);
     }
   }, []);
 
   const value = {
+    cloud: cloudState, cloudSync, cloudSignIn, cloudSignOut, cloudReset: cloud.resetPassword,
     library, setLibrary, addModel, updateModel, removeModel, setLibrarySettings,
-    warrantyDoc, setWarrantyDoc, quoteDraft, setQuoteDraft, applyQuote, exportBackup, importBackup,
+    compliance, setCompliance, warrantyDoc, setWarrantyDoc, quoteDraft, setQuoteDraft, applyQuote, exportBackup, importBackup,
     toolInputs, setTool,
     replies, addReply, updateReply, removeReply, stamp, setStamp,
     literature, setLiterature, addLiterature, updateLiterature, removeLiterature,
@@ -305,3 +414,8 @@ export function StoreProvider({ children }) {
 }
 
 export const useStore = () => useContext(Ctx);
+
+function mergeModels(remote, local) {
+  const ids = new Set(remote.map((m) => m.id));
+  return [...remote, ...local.filter((m) => !ids.has(m.id))];
+}

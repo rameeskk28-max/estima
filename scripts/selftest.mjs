@@ -153,5 +153,31 @@ import { buildReplyPdf } from '../src/lib/pdf/replyPdf.js';
   assert(rp.pageCount === 1 + 1 + 2 + 1 + 3, `reply package: sheet + annexure divider + 2 + previous divider + 3 = ${rp.pageCount} pages`);
 }
 
+// Specification → Technical Compliance Statement (synthetic spec text)
+import { parseSpec, statusFromNote } from '../src/lib/compliance/spec.js';
+import { buildCompliancePdf } from '../src/lib/compliance/compliancePdf.js';
+{
+  const L = (text, note = '') => ({ text, x: 72, note });
+  const foot = (n) => [L('PROJECT X SPECIFICATIONS'), L(`Page ${n} of 3`)];
+  const pages = [
+    [L('SECTION 22 11 23 - DOMESTIC WATER PUMPS'), L('PART 1 GENERAL'), L('1.1 SUMMARY'), L('A. Section includes booster pumps', 'Noted.'), L('B. Related sections include piping.'), L('1.2 SUBMITTALS'), L('A. Product data for each pump type.', 'Complied'), ...foot(1)],
+    [L('PART 2 PRODUCTS'), L('2.1 BOOSTER PUMPS'), L('A. Vertical multistage pumps with stainless steel'), L('impellers and mechanical seals.', 'Deviation'), L('2.1.1 Motors shall be IE3 efficiency.'), ...foot(2)],
+    [L('PART 3 EXECUTION'), L('3.1 INSTALLATION'), L('A. Install per manufacturer instructions.'), L('END OF SECTION'), L('A. ignored'), ...foot(3)],
+  ];
+  const sp = parseSpec(pages);
+  const cl = sp.rows.filter((r) => r.type === 'clause');
+  assert(sp.rows.filter((r) => r.type === 'part').length === 3, 'spec: 3 PART bars');
+  assert(cl.map((r) => r.clause).join(',') === '1.1 A,1.1 B,1.2 A,2.1 A,2.1.1,3.1 A', `spec: one row per numbered/lettered clause (${cl.map((r) => r.clause).join(',')})`);
+  assert(cl[3].text.includes('impellers and mechanical seals') && statusFromNote(cl[3].note) === 'deviation', 'spec: continuation lines joined, margin note → deviation');
+  assert(!sp.rows.some((r) => /Page \d|SPECIFICATIONS/.test(r.text)), 'spec: repeated header/footer removed');
+  cl.forEach((r) => (r.status = statusFromNote(r.note) || 'complied', r.remarks = 'Complied.'));
+  const cb = await buildCompliancePdf({ ...sp, specNo: '221123', specName: 'DOMESTIC WATER PUMPS', brandOffered: 'Franklin Electric Pumps', supplier: 'Greenland', keyItems: null, signFor: 'For: GREENLAND', signName: 'Test', signLines: '' }, project, { logo });
+  writeFileSync(`${out}/compliance.pdf`, cb);
+  assert((await PDFDocument.load(cb)).getPageCount() >= 1, 'compliance statement PDF builds');
+  const ents = [{ id: 'c1', title: 'TECHNICAL COMPLIANCE STATEMENT', kind: 'compliance' }];
+  const res2 = await compileSubmittal({ project, entries: ents, duties: [], files: {}, logo, compliance: { ...sp, specNo: '221123' } });
+  assert(res2.pageCount >= 2, `compliance statement inserted into submittal (${res2.pageCount} pages)`);
+}
+
 if (failures) { console.error(`${failures} failure(s)`); process.exit(1); }
 console.log('All self-tests passed.');

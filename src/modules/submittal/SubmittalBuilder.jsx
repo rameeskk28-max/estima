@@ -170,10 +170,10 @@ function PumpSchedule() {
 }
 
 /* ------------------------------------------------------------------ */
-const KIND_LABEL = { upload: 'Documents', schedule: 'Pump schedule', technical: 'Technical literature', warranty: 'Warranty certificate' };
+const KIND_LABEL = { upload: 'Documents', schedule: 'Pump schedule', technical: 'Technical literature', warranty: 'Warranty certificate', compliance: 'Compliance statement' };
 
 function IndexManager() {
-  const { entries, setEntries, files, duties, uid, removeFile, schedule, literature, warrantyDoc } = useStore();
+  const { entries, setEntries, files, duties, uid, removeFile, schedule, literature, warrantyDoc, compliance } = useStore();
   const update = (id, patch) => setEntries((l) => l.map((e) => (e.id === id ? { ...e, ...patch } : e)));
   const move = (idx, dir) =>
     setEntries((l) => {
@@ -258,6 +258,8 @@ function IndexManager() {
                 {e.libSlot && (
                   <AutoItem icon={Library} text={(files[e.libSlot] || []).length ? `Document Library – ${(files[e.libSlot] || []).length} file(s)` : 'Document Library – nothing saved yet (Quote to Submittal → Document Library)'} />
                 )}
+                {e.kind === 'compliance' && <AutoItem icon={ShieldCheck} text={compliance.rows.length ? `Technical Compliance Statement – ${compliance.rows.filter((r) => r.type === 'clause').length} clauses (Quote to Submittal → Compliance Statement)` : 'Compliance statement not prepared yet (Quote to Submittal → Compliance Statement) – or attach a PDF below'} />}
+                {e.kind === 'technical' && e.litId && duties.filter((d) => (e.dutyIds || []).includes(d.id)).map((d) => <AutoItem key={d.id} icon={Calculator} text={`Hydraulic Calculation – ${d.tag} · ${d.calcType}`} />)}
                 {e.kind === 'warranty' && <AutoItem icon={ShieldCheck} text={`Generated Certificate of Warranty – Draft (${warrantyDoc?.period || 'period not set'})`} />}
                 {e.kind === 'technical' &&
                   literature
@@ -293,12 +295,12 @@ const AutoItem = ({ icon: Icon, text }) => (
 
 /* ------------------------------------------------------------------ */
 function CompilePanel() {
-  const { project, entries, duties, files, notify, getLogo, schedule, literature, warrantyDoc, library } = useStore();
+  const { project, entries, duties, files, notify, getLogo, schedule, literature, warrantyDoc, library, compliance, stamp } = useStore();
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState('');
   const [result, setResult] = useState(null);
 
-  const plan = useMemo(() => buildPlan(entries, duties, files, literature), [entries, duties, files, literature]);
+  const plan = useMemo(() => buildPlan(entries, duties, files, literature, { compliance }), [entries, duties, files, literature, compliance]);
   const stats = useMemo(() => {
     let uploadPages = 0;
     let docs = 0;
@@ -314,7 +316,7 @@ function CompilePanel() {
     setResult(null);
     try {
       const res = await compileSubmittal(
-        { project, entries, duties, files, logo: await getLogo(), schedule, literature, warranty: warrantyDoc, librarySettings: library.settings },
+        { project, entries, duties, files, logo: await getLogo(), schedule, literature, warranty: warrantyDoc, librarySettings: library.settings, compliance, stamp },
         setProgress,
       );
       const name = `${safeName(project.refNo || 'Submittal')}_Rev${safeName(project.revision || '0')}_${safeName(project.projectName || 'Project')}.pdf`;

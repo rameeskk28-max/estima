@@ -17,7 +17,7 @@ export async function extractItems(bytes, pdfjs) {
     pages.push(
       tc.items
         .filter((it) => it.str && it.str.trim())
-        .map((it) => ({ page: p, str: it.str, x: it.transform[4], y: vp.height - it.transform[5], w: it.width, h: Math.abs(it.transform[3]) || 9 })),
+        .map((it) => ({ page: p, str: it.str, x: it.transform[4], y: vp.height - it.transform[5], w: it.width, h: Math.abs(it.transform[3]) || 9, pw: vp.width })),
     );
   }
   await doc.destroy();
@@ -25,7 +25,7 @@ export async function extractItems(bytes, pdfjs) {
 }
 
 /** Group items of one page into lines (top → bottom), each line's items sorted left → right. */
-function toLines(items, tol = 2.5) {
+export function toLines(items, tol = 2.5) {
   const sorted = [...items].sort((a, b) => a.y - b.y || a.x - b.x);
   const lines = [];
   for (const it of sorted) {
@@ -37,7 +37,7 @@ function toLines(items, tol = 2.5) {
   return lines.sort((a, b) => a.y - b.y);
 }
 
-const join = (items) =>
+export const join = (items) =>
   items
     .reduce((s, it, k) => {
       if (!k) return it.str;
