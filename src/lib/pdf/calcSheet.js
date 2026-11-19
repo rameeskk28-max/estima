@@ -1,7 +1,8 @@
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, rgb } from 'pdf-lib';
 import { A4, C, loadFonts, wrap, drawText, rect, hline, vline, clean, fmtDate } from './theme.js';
 
 const [PW, PH] = A4;
+const TONES = { green: { fg: C.green, bg: C.greenBg }, amber: { fg: rgb(0.66, 0.38, 0.02), bg: rgb(1, 0.95, 0.85) }, red: { fg: C.red, bg: C.redBg }, blue: { fg: C.navy, bg: C.light } };
 const L = 30;
 const R = PW - 30;
 const W = R - L;
@@ -92,7 +93,8 @@ export async function renderCalcSheet(doc, fonts, sheet, project = {}, logoImg =
     ensure(lh * 3 + pad * 4);
     drawHead();
     t.rows.forEach((r) => {
-      const fontFor = (k) => (r.bold || (r.keyCol && k === 0) || (r.valCol === k) ? fonts.bold : r.refCol === k ? fonts.ital : fonts.reg);
+      const toned = (k) => r.tone && r.tone.col === k;
+      const fontFor = (k) => (r.bold || (r.keyCol && k === 0) || r.valCol === k || toned(k) ? fonts.bold : r.refCol === k ? fonts.ital : fonts.reg);
       const cells = r.c.map((cell, k) => wrap(fontFor(k), cell ?? '', size, widths[k] - pad * 2));
       const h = Math.max(...cells.map((c) => c.length)) * lh + pad * 2 - 1;
       if (ensure(h)) drawHead();
@@ -102,6 +104,7 @@ export async function renderCalcSheet(doc, fonts, sheet, project = {}, logoImg =
       cells.forEach((lines, k) => {
         const flagged = r.flag === k;
         if (flagged) rect(page, x + 0.5, y - h + 0.5, widths[k] - 1, h - 1, { fill: C.redBg });
+        if (toned(k)) rect(page, x + 0.5, y - h + 0.5, widths[k] - 1, h - 1, { fill: TONES[r.tone.color].bg });
         lines.forEach((ln, li) => {
           const center = t.columns[k].align === 'c';
           drawText(page, ln, {
@@ -109,7 +112,7 @@ export async function renderCalcSheet(doc, fonts, sheet, project = {}, logoImg =
             y: y - pad - size + 1 - li * lh,
             size,
             font: fontFor(k),
-            color: flagged ? C.red : r.refCol === k ? C.muted : r.valCol === k || r.bold ? C.navy : C.text,
+            color: toned(k) ? TONES[r.tone.color].fg : flagged ? C.red : r.refCol === k ? C.muted : r.valCol === k || r.bold ? C.navy : C.text,
             align: center ? 'center' : 'left',
           });
         });
@@ -157,13 +160,16 @@ export async function renderCalcSheet(doc, fonts, sheet, project = {}, logoImg =
   // Framed picture (e.g. product photo) – sec.pdfImage is an embedded PDFImage
   const imageBox = (sec) => {
     if (!sec.pdfImage) return;
-    sectionTitle(sec.title);
-    const boxH = 170;
+    const boxH = sec.height || 170;
+    if (sec.title) sectionTitle(sec.title);
     ensure(boxH + 8);
-    rect(page, L, y - boxH, W, boxH, { stroke: C.border, width: 0.5 });
+    const bw = sec.boxWidth ? sec.boxWidth * W : W;
+    const bx = sec.align === 'right' ? R - bw : L;
+    rect(page, bx, y - boxH, bw, boxH, { stroke: C.border, width: 0.5 });
+    if (sec.caption) drawText(page, sec.caption, { x: bx + bw / 2, y: y - boxH + 5, size: 6.6, font: fonts.bold, color: C.muted, align: 'center' });
     const img = sec.pdfImage;
-    const sc = Math.min((W - 20) / img.width, (boxH - 16) / img.height);
-    page.drawImage(img, { x: L + W / 2 - (img.width * sc) / 2, y: y - boxH / 2 - (img.height * sc) / 2, width: img.width * sc, height: img.height * sc });
+    const sc = Math.min((bw - 20) / img.width, (boxH - (sec.caption ? 24 : 16)) / img.height);
+    page.drawImage(img, { x: bx + bw / 2 - (img.width * sc) / 2, y: y - boxH / 2 - (img.height * sc) / 2 + (sec.caption ? 5 : 0), width: img.width * sc, height: img.height * sc });
     y -= boxH + 8;
   };
 
@@ -221,9 +227,9 @@ function drawSheetHeader(page, fonts, sheet, project, n, total, logoImg) {
   const gx = L + leftW;
   const gw = W - leftW;
   const cells = [
-    ['Project', project.projectName || '–', 'Ref No.', project.refNo || '–'],
-    ['Tag', sheet.tag || '–', 'Rev.', project.revision || '0'],
-    ['Date', fmtDate(project.date) || '–', 'Sheet', `${n} of ${total}`],
+    ['Project', project.projectName || '–', 'Ref No.', sheet.ref || project.refNo || '–'],
+    ['Tag', sheet.tag || '–', 'Rev.', sheet.rev || project.revision || '0'],
+    ['Date', fmtDate(sheet.date || project.date) || '–', 'Sheet', `${n} of ${total}`],
   ];
   const rh = h1 / 3;
   cells.forEach((row, r) => {

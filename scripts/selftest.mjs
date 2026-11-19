@@ -107,5 +107,20 @@ const isA4 = (s) => { const [a, b] = [s.width, s.height].sort((x, y) => x - y); 
 assert(sizes.every(isA4), 'every page is A4 (portrait or landscape)');
 for (const s of res.toc) console.log(`  ${String(s.number).padStart(2, '0')} ${s.title.padEnd(62)} p.${s.page}  ${s.items.map((i) => i.label + '@' + i.page).join(', ')}`);
 console.log('warnings:', res.warnings);
+// Consultant comment reply package
+import { newReply, newComment, newAnnexure, annexureSlot, prevSlot, replySheet } from '../src/lib/replies.js';
+import { buildReplyPdf } from '../src/lib/pdf/replyPdf.js';
+{
+  const a1 = newAnnexure({ desc: 'Revised drawings' });
+  const rep = newReply({ marNo: 'MAR-001', rev: '02', annexures: [a1], comments: [newComment({ comment: 'Revise enclosure', reply: 'Revised', status: 'comply', annexure: a1.id }), newComment({ comment: 'Origin', reply: 'Deviation requested', status: 'deviation' })] });
+  const sh = replySheet(rep, project);
+  const tbl = sh.sections.find((x) => x.title.startsWith('2.'));
+  assert(tbl.columns.length === 4 && tbl.rows[0].c[3] === 'COMPLY\nRefer Annexure 01' && tbl.rows[1].tone.color === 'red', 'reply table: 4 columns, status + annexure reference');
+  const rf = { [annexureSlot(rep, a1)]: [{ name: 'dwg.pdf', bytes: await sample('Drawing', [841.89, 595.28], 0, 2), pages: 2 }], [prevSlot(rep)]: [{ name: 'prev.pdf', bytes: await sample('Previous', [595.28, 841.89], 0, 3), pages: 3 }] };
+  const rp = await buildReplyPdf(rep, project, { logo, files: rf });
+  writeFileSync(`${out}/comment-reply.pdf`, rp.bytes);
+  assert(rp.pageCount === 1 + 1 + 2 + 1 + 3, `reply package: sheet + annexure divider + 2 + previous divider + 3 = ${rp.pageCount} pages`);
+}
+
 if (failures) { console.error(`${failures} failure(s)`); process.exit(1); }
 console.log('All self-tests passed.');

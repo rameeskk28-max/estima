@@ -50,9 +50,18 @@ hydraulic calculation sheets. Download as PDF, or let the submittal insert it in
 Project header, editable 14-point UAE index, PDF uploads per section, compile to a single A4 PDF with
 cover, mapped TOC, section dividers, pump schedule, calculation sheets and merged uploads.
 
+## Comment Replies (submittal revisions)
+Reply to the consultant's comments on a returned submittal, in the same calculation-sheet layout:
+project / MAR information (MAR No., Rev., MAR date, consultant's engineers, approval-status annotation),
+comments table **No. | Consultant comment | Greenland reply / action | Annexure reference** where the last
+column shows the status (Comply / Partially Comply / Deviation / Noted, colour-coded) and the annexure,
+an annexure index, and the company stamp. Paste comments in bulk, add annexures with PDF uploads, attach
+the previous submittal, create the next revision with one click, and download everything as one A4 PDF
+(reply sheet → Annexure dividers + PDFs → Previous submittal).
+
 ## Layout & themes
-Home page with a short intro and four folders – **Hydraulic Calculations**, **Pump Schedule**, **Technical
-Literature**, **Submittal Package** – reachable from the top navigation (calculators as tabs inside their folder).
+Home page with a short intro and five folders – **Hydraulic Calculations**, **Pump Schedule**, **Technical
+Literature**, **Submittal Package**, **Comment Replies** – reachable from the top navigation (calculators as tabs inside their folder).
 Dark "glass" design (grid background, glow orbs, frosted cards, Space Grotesk headings) in Greenland green & navy,
 with a light version – toggle with the sun / moon button.
 

@@ -5,6 +5,7 @@ import { BoosterCalc, TransferCalc, SumpCalc, VesselCalc, ChwCalc } from './modu
 import { SubmittalBuilder } from './modules/submittal/SubmittalBuilder.jsx';
 import { PumpScheduleTab } from './modules/schedule/PumpScheduleTab.jsx';
 import { LiteratureTab } from './modules/literature/LiteratureTab.jsx';
+import { RepliesTab } from './modules/replies/RepliesTab.jsx';
 import { Home, FOLDERS, CALC_ITEMS, useReveal } from './modules/home/Home.jsx';
 import { Toast } from './components/ui.jsx';
 import { BRAND } from './brand.js';
@@ -17,7 +18,7 @@ function parseRoute() {
   if (LEGACY[r]) r = LEGACY[r];
   const [folder, item] = r.split('/');
   if (folder === 'calc') return { folder: 'calc', item: CALC_PAGES[item] ? item : null };
-  if (['schedule', 'literature', 'submittal'].includes(folder)) return { folder, item: null };
+  if (['schedule', 'literature', 'submittal', 'replies'].includes(folder)) return { folder, item: null };
   return { folder: 'home', item: null };
 }
 
@@ -68,7 +69,7 @@ function Shell() {
             </span>
           </button>
 
-          <nav className="hidden items-center gap-1 text-sm font-medium lg:flex">
+          <nav className="hidden items-center gap-0.5 text-sm font-medium xl:flex">
             <NavLink active={route.folder === 'home'} onClick={() => go('')}>
               Home
             </NavLink>
@@ -87,13 +88,13 @@ function Shell() {
             <button onClick={() => go('submittal')} className="btn-primary hidden !px-5 !py-2.5 sm:inline-flex">
               Compile Submittal
             </button>
-            <button onClick={() => setMenu((m) => !m)} className="glass-pill flex h-10 w-10 items-center justify-center rounded-xl text-slate-200 lg:hidden" aria-label="Toggle menu">
+            <button onClick={() => setMenu((m) => !m)} className="glass-pill flex h-10 w-10 items-center justify-center rounded-xl text-slate-200 xl:hidden" aria-label="Toggle menu">
               {menu ? <X size={20} /> : <Menu size={20} />}
             </button>
           </div>
         </div>
         {menu && (
-          <div className="border-t border-line px-5 py-5 lg:hidden">
+          <div className="border-t border-line px-5 py-5 xl:hidden">
             <button onClick={() => go('')} className="block py-1.5 text-base font-medium text-slate-200">
               Home
             </button>
@@ -120,7 +121,7 @@ function Shell() {
         )}
       </header>
 
-      <main className="relative z-10 mx-auto max-w-[1500px] px-4 pb-10 sm:px-6">
+      <main className="relative mx-auto max-w-[1500px] px-4 pb-10 sm:px-6">
         <div key={key} className="page-enter">
           {route.folder === 'home' ? <Home go={go} /> : <FolderPage route={route} go={go} />}
         </div>
@@ -185,7 +186,7 @@ function CalcMenu({ active, go }) {
 function FolderPage({ route, go }) {
   const folder = FOLDERS.find((f) => f.key === route.folder);
   const calcItem = CALC_ITEMS.find((c) => c.key === route.item);
-  const Page = route.folder === 'calc' ? CALC_PAGES[route.item] : { schedule: PumpScheduleTab, literature: LiteratureTab, submittal: SubmittalBuilder }[route.folder];
+  const Page = route.folder === 'calc' ? CALC_PAGES[route.item] : { schedule: PumpScheduleTab, literature: LiteratureTab, submittal: SubmittalBuilder, replies: RepliesTab }[route.folder];
   return (
     <div className="pt-6">
       <div className="no-print mb-6 flex flex-wrap items-center justify-between gap-4">

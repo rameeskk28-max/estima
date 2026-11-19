@@ -5,6 +5,7 @@ import { fileStore } from './lib/fileStore.js';
 import { BRAND, brandLogoBytes } from './brand.js';
 import { emptyScheduleRow } from './lib/pdf/schedulePdf.js';
 import { newLiterature } from './lib/literature.js';
+import { newReply, annexureSlot, prevSlot } from './lib/replies.js';
 
 const Ctx = createContext(null);
 const KEY = 'pump-submittal-v2';
@@ -54,17 +55,19 @@ export function StoreProvider({ children }) {
   // v3 design: template dark look is the default (older saved 'theme' is ignored)
   const [theme, setThemeState] = useState(() => saved?.uiTheme || 'dark');
   const [literature, setLiterature] = useState(() => saved?.literature || []);
+  const [replies, setReplies] = useState(() => saved?.replies || []);
+  const [stamp, setStamp] = useState(() => saved?.stamp || null);
   const [files, setFiles] = useState({}); // entryId -> [{id,name,size,pages,bytes}]
   const [logo, setLogo] = useState(saved?.logo || null); // {dataUrl,type,name}
   const [toast, setToast] = useState(null);
 
   useEffect(() => {
     try {
-      localStorage.setItem(KEY, JSON.stringify({ project, entries, duties, inputs, logo, schedule, uiTheme: theme, literature }));
+      localStorage.setItem(KEY, JSON.stringify({ project, entries, duties, inputs, logo, schedule, uiTheme: theme, literature, replies, stamp }));
     } catch {
       /* quota – ignore */
     }
-  }, [project, entries, duties, inputs, logo, schedule, theme, literature]);
+  }, [project, entries, duties, inputs, logo, schedule, theme, literature, replies, stamp]);
 
   useEffect(() => {
     fileStore.all().then((recs) => {
@@ -136,6 +139,8 @@ export function StoreProvider({ children }) {
     setLogo(null);
     setSchedule(DEFAULT_SCHEDULE());
     setLiterature([]);
+    setReplies([]);
+    setStamp(null);
     await fileStore.clear();
   }, []);
 
@@ -190,7 +195,23 @@ export function StoreProvider({ children }) {
     [files, removeFile],
   );
 
+  const addReply = useCallback((o) => {
+    const r = newReply(o);
+    setReplies((l) => [...l, r]);
+    return r.id;
+  }, []);
+  const updateReply = useCallback((id, patch) => setReplies((l) => l.map((x) => (x.id === id ? { ...x, ...(typeof patch === 'function' ? patch(x) : patch) } : x))), []);
+  const removeReply = useCallback(
+    async (id) => {
+      const r = replies.find((x) => x.id === id);
+      if (r) for (const slot of [...r.annexures.map((a) => annexureSlot(r, a)), prevSlot(r)]) for (const f of files[slot] || []) await removeFile(slot, f.id);
+      setReplies((l) => l.filter((x) => x.id !== id));
+    },
+    [replies, files, removeFile],
+  );
+
   const value = {
+    replies, addReply, updateReply, removeReply, stamp, setStamp,
     literature, setLiterature, addLiterature, updateLiterature, removeLiterature,
     getLogo, logoSrc, schedule, setSchedule, importDutiesToSchedule, theme, setTheme,
     project, setProject, entries, setEntries, duties, setDuties, inputs, setCalcInputs, saveDuty,

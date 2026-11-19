@@ -6,6 +6,8 @@ import { buildCalcSheetPdf, sectionTable } from '../lib/pdf/calcSheet.js';
 import { fmtDate } from '../lib/pdf/theme.js';
 import { useStore } from '../store.jsx';
 
+const TONE_CSS = { green: ['#0f7a3d', '#e6f7eb'], amber: ['#a86105', '#fff2d9'], red: ['#bd1a1a', '#fdebeb'], blue: ['#153963', '#f1f5fb'] };
+
 /** HTML A4 rendering of a calculation sheet – mirrors the pdf-lib layout. */
 export function SheetHtml({ sheet, project }) {
   const { logoSrc } = useStore();
@@ -19,14 +21,14 @@ export function SheetHtml({ sheet, project }) {
               <div style={{ fontSize: '6.4pt', fontWeight: 700, color: '#048c3c', marginTop: 2 }}>{sheet.sheetLabel || 'HYDRAULIC CALCULATION SHEET'}</div>
             </td>
             <HdrCell k="Project" v={project.projectName} />
-            <HdrCell k="Ref No." v={project.refNo} />
+            <HdrCell k="Ref No." v={sheet.ref || project.refNo} />
           </tr>
           <tr>
             <HdrCell k="Tag" v={sheet.tag} />
-            <HdrCell k="Rev." v={project.revision || '0'} />
+            <HdrCell k="Rev." v={sheet.rev || project.revision || '0'} />
           </tr>
           <tr>
-            <HdrCell k="Date" v={fmtDate(project.date)} />
+            <HdrCell k="Date" v={fmtDate(sheet.date || project.date)} />
             <HdrCell k="Sheet" v="1" />
           </tr>
         </tbody>
@@ -42,10 +44,11 @@ export function SheetHtml({ sheet, project }) {
           );
         if (sec.type === 'image')
           return sec.src ? (
-            <div key={si} style={{ marginBottom: 7 }}>
-              <div className="sec-title">{sec.title}</div>
-              <div style={{ border: '0.5pt solid #bcc9db', height: '60mm', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 6 }}>
-                <img src={sec.src} alt={sec.title} style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} />
+            <div key={si} style={{ marginBottom: 7, display: 'flex', flexDirection: 'column', alignItems: sec.align === 'right' ? 'flex-end' : 'stretch' }}>
+              {sec.title && <div className="sec-title" style={{ alignSelf: 'stretch' }}>{sec.title}</div>}
+              <div style={{ border: '0.5pt solid #bcc9db', width: sec.boxWidth ? `${sec.boxWidth * 100}%` : '100%', height: sec.height ? `${(sec.height / 72) * 25.4}mm` : '60mm', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 6 }}>
+                <img src={sec.src} alt={sec.title || sec.caption || 'image'} style={{ maxHeight: sec.caption ? '82%' : '100%', maxWidth: '100%', objectFit: 'contain' }} />
+                {sec.caption && <div style={{ fontSize: '6.6pt', fontWeight: 700, color: '#617086', marginTop: 2 }}>{sec.caption}</div>}
               </div>
             </div>
           ) : null;
@@ -81,10 +84,11 @@ export function SheetHtml({ sheet, project }) {
                         style={{
                           width: t.noHead ? `${t.columns[k].w * 100}%` : undefined,
                           textAlign: t.columns[k].align === 'c' ? 'center' : 'left',
-                          fontWeight: r.bold || (r.keyCol && k === 0) || r.valCol === k ? 700 : 400,
+                          fontWeight: r.bold || (r.keyCol && k === 0) || r.valCol === k || r.tone?.col === k ? 700 : 400,
+                          whiteSpace: 'pre-line',
                           fontStyle: r.refCol === k ? 'italic' : 'normal',
-                          color: r.flag === k ? '#bd1a1a' : r.refCol === k ? '#617086' : r.valCol === k ? '#153963' : undefined,
-                          background: r.flag === k ? '#fdebeb' : r.keyCol && k === 0 ? '#f1f5fb' : undefined,
+                          color: r.tone?.col === k ? TONE_CSS[r.tone.color][0] : r.flag === k ? '#bd1a1a' : r.refCol === k ? '#617086' : r.valCol === k ? '#153963' : undefined,
+                          background: r.tone?.col === k ? TONE_CSS[r.tone.color][1] : r.flag === k ? '#fdebeb' : r.keyCol && k === 0 ? '#f1f5fb' : undefined,
                         }}
                       >
                         {cell}
