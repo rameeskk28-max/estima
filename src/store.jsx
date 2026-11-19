@@ -400,7 +400,7 @@ export function StoreProvider({ children }) {
   }, []);
 
   const value = {
-    cloud: cloudState, cloudSync, cloudSignIn, cloudSignOut, cloudReset: cloud.resetPassword,
+    cloud: cloudState, cloudSync, cloudSignIn, cloudSignOut, cloudChangePassword: cloud.changePassword,
     library, setLibrary, addModel, updateModel, removeModel, setLibrarySettings,
     compliance, setCompliance, warrantyDoc, setWarrantyDoc, quoteDraft, setQuoteDraft, applyQuote, exportBackup, importBackup,
     toolInputs, setTool,

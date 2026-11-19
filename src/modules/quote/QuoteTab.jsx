@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { FileInput, Library, ClipboardCheck, Upload, LoaderCircle, CheckCircle2, XCircle, Wand2, FileDown, ArrowRight, Plus, Trash2, Search, HardDriveDownload, Cloud, CloudOff, LogIn, LogOut, RefreshCw, HardDriveUpload, Settings2, Package, Building2, ShieldCheck, FileText } from 'lucide-react';
+import { FileInput, Library, ClipboardCheck, Upload, LoaderCircle, CheckCircle2, XCircle, Wand2, FileDown, ArrowRight, Plus, Trash2, Search, HardDriveDownload, Cloud, CloudOff, LogIn, LogOut, RefreshCw, KeyRound, HardDriveUpload, Settings2, Package, Building2, ShieldCheck, FileText } from 'lucide-react';
 import { useStore } from '../../store.jsx';
 import { Card, Field, TextField, SelectField, downloadBytes, safeName } from '../../components/ui.jsx';
 import { FileSlot } from '../../components/FileSlot.jsx';
@@ -8,6 +8,7 @@ import { generateFromQuote, systemName, tagFrom, equipmentText, matchModel, LIBR
 import { LIT_TEMPLATES } from '../../lib/literature.js';
 import { compileSubmittal } from '../../lib/pdf/compile.js';
 import { readBackup } from '../../lib/backup.js';
+import { displayName } from '../../lib/cloud.js';
 import { SheetPreviewModal } from '../../components/SheetPreview.jsx';
 
 export const QUOTE_ITEMS = [
@@ -498,8 +499,9 @@ export function DocumentLibrary() {
 
 /* ================================================================== */
 function CloudCard() {
-  const { cloud, cloudSignIn, cloudSignOut, cloudSync, cloudReset, notify } = useStore();
+  const { cloud, cloudSignIn, cloudSignOut, cloudSync, cloudChangePassword, notify } = useStore();
   const [email, setEmail] = useState('');
+  const [np, setNp] = useState({ open: false, a: '', b: '' });
   const [pw, setPw] = useState('');
   const [busy, setBusy] = useState(false);
   if (!cloud.configured)
@@ -516,7 +518,7 @@ function CloudCard() {
       <Card title="Cloud library" icon={Cloud}>
         <div className="flex flex-wrap items-center gap-3">
           <div className="text-sm text-slate-300">
-            Signed in as <b className="text-slate-50">{cloud.user.email}</b> – library documents are saved online and shared with your team.
+            Signed in as <b className="text-slate-50">{displayName(cloud.user)}</b> – library documents are saved online and shared with your team.
             <div className={`mt-1 flex items-center gap-1 text-xs ${tone}`}>
               {cloud.status === 'syncing' && <LoaderCircle size={12} className="animate-spin" />} {cloud.msg || 'Ready'}
             </div>
@@ -525,11 +527,35 @@ function CloudCard() {
             <button className="btn-secondary" onClick={() => cloudSync()} disabled={cloud.status === 'syncing'}>
               <RefreshCw size={15} /> Sync now
             </button>
+            <button className="btn-ghost" onClick={() => setNp({ open: !np.open, a: '', b: '' })}>
+              <KeyRound size={15} /> Change password
+            </button>
             <button className="btn-ghost" onClick={cloudSignOut}>
               <LogOut size={15} /> Sign out
             </button>
           </div>
         </div>
+        {np.open && (
+          <form
+            className="mt-3 flex flex-wrap items-end gap-3"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (np.a.length < 8) return notify('Use at least 8 characters', 'bad');
+              if (np.a !== np.b) return notify('The two passwords do not match', 'bad');
+              try {
+                await cloudChangePassword(np.a);
+                setNp({ open: false, a: '', b: '' });
+                notify('Password changed');
+              } catch (err) {
+                notify(err.message, 'bad');
+              }
+            }}
+          >
+            <TextField label="New password" type="password" autoComplete="new-password" value={np.a} onChange={(v) => setNp((x) => ({ ...x, a: v }))} className="min-w-[180px] flex-1" />
+            <TextField label="Repeat new password" type="password" autoComplete="new-password" value={np.b} onChange={(v) => setNp((x) => ({ ...x, b: v }))} className="min-w-[180px] flex-1" />
+            <button className="btn-primary" type="submit">Save password</button>
+          </form>
+        )}
       </Card>
     );
   const submit = async (e) => {
@@ -549,26 +575,12 @@ function CloudCard() {
     <Card title="Cloud library – sign in" icon={Cloud}>
       <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
         <p className="w-full text-sm text-slate-400">Sign in to save the library online and open it on any computer. Without signing in, documents stay in this browser only.</p>
-        <TextField label="Email" type="email" value={email} onChange={setEmail} className="min-w-[220px] flex-1" />
-        <TextField label="Password" type="password" value={pw} onChange={setPw} className="min-w-[180px] flex-1" />
+        <TextField label="Username" autoComplete="username" value={email} onChange={setEmail} className="min-w-[220px] flex-1" />
+        <TextField label="Password" type="password" autoComplete="current-password" value={pw} onChange={setPw} className="min-w-[180px] flex-1" />
         <button className="btn-primary" type="submit" disabled={busy || !email || !pw}>
           {busy ? <LoaderCircle size={16} className="animate-spin" /> : <LogIn size={16} />} Sign in
         </button>
-        <button
-          type="button"
-          className="btn-ghost text-xs"
-          disabled={!email}
-          onClick={async () => {
-            try {
-              await cloudReset(email);
-              notify('Password reset email sent');
-            } catch (err) {
-              notify(err.message, 'bad');
-            }
-          }}
-        >
-          Forgot password?
-        </button>
+        <span className="w-full text-[11px] text-slate-500">Forgot your password? Ask the site administrator to reset it.</span>
       </form>
     </Card>
   );

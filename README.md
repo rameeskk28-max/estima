@@ -104,8 +104,10 @@ saved online and shared by every signed-in team member.
    (or `supabase db push` if the project is linked through the GitHub integration). It creates the
    `library_state` and `library_files` tables, a private `library` storage bucket and the access policies
    (signed-in users only).
-2. **Authentication → Users → Add user** for each team member (email + password). Under
-   **Authentication → Sign In / Providers**, turn **off** "Allow new users to sign up" so only invited users get in.
+2. **Authentication → Users → Add user** for each team member. People sign in with a **username**:
+   create the user as `<username>@glestima.netlify.app` (tick "Auto confirm"; no mail is sent) with a
+   temporary password – they change it under Document Library → Change password. Under
+   **Authentication → Sign In / Providers**, turn **off** "Allow new users to sign up".
 3. Netlify → **Site configuration → Environment variables**, add
    `VITE_SUPABASE_URL` (Project URL) and `VITE_SUPABASE_ANON_KEY` (anon / publishable key) from
    Supabase → Project Settings → API, then **Deploys → Trigger deploy**.

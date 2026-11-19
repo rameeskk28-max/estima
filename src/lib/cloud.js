@@ -26,16 +26,24 @@ export function onAuth(cb) {
   const { data } = sb.auth.onAuthStateChange((_e, s) => cb(s?.user || null));
   return () => data.subscription.unsubscribe();
 }
-export async function signIn(email, password) {
+// Team members sign in with a username; Supabase needs an email-shaped ID, so usernames map to
+// <username>@glestima.netlify.app (no mail is ever sent there).
+export const LOGIN_DOMAIN = 'glestima.netlify.app';
+export const loginId = (u) => {
+  const v = String(u || '').trim().toLowerCase();
+  return v.includes('@') ? v : `${v}@${LOGIN_DOMAIN}`;
+};
+export const displayName = (user) => (user?.email || '').replace(`@${LOGIN_DOMAIN}`, '');
+export async function signIn(username, password) {
   need();
-  return check(await sb.auth.signInWithPassword({ email: email.trim(), password })).user;
+  return check(await sb.auth.signInWithPassword({ email: loginId(username), password })).user;
+}
+export async function changePassword(password) {
+  need();
+  check(await sb.auth.updateUser({ password }));
 }
 export async function signOut() {
   if (sb) await sb.auth.signOut();
-}
-export async function resetPassword(email) {
-  need();
-  check(await sb.auth.resetPasswordForEmail(email.trim(), { redirectTo: window.location.origin }));
 }
 
 /** Library state (pump models + defaults/warranty texts). */
