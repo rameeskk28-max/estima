@@ -12,7 +12,12 @@ const TONE_CSS = { green: ['#0f7a3d', '#e6f7eb'], amber: ['#a86105', '#fff2d9'],
 export function SheetHtml({ sheet, project }) {
   const { logoSrc } = useStore();
   return (
-    <div className="a4 mx-auto">
+    <div className="a4 mx-auto" style={{ position: 'relative', overflow: 'hidden' }}>
+      {sheet.watermark && (
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', zIndex: 2 }}>
+          <span style={{ transform: 'rotate(-35deg)', fontSize: '120pt', fontWeight: 800, color: 'rgba(191,26,26,0.12)', letterSpacing: 4 }}>{sheet.watermark}</span>
+        </div>
+      )}
       <table className="hdr">
         <tbody>
           <tr>
@@ -40,6 +45,13 @@ export function SheetHtml({ sheet, project }) {
           return (
             <div key={si} style={{ background: '#e6f7eb', border: '1pt solid #06af4b', borderLeft: '4pt solid #06af4b', padding: '5pt 8pt', fontWeight: 700, color: '#153963', fontSize: '9pt', margin: '6pt 0' }}>
               {sec.text}
+            </div>
+          );
+        if (sec.type === 'para')
+          return (
+            <div key={si} style={{ marginBottom: 7 }}>
+              {sec.title && <div className="sec-title">{sec.title}</div>}
+              <div style={{ whiteSpace: 'pre-line', fontSize: '8.8pt', padding: '4pt 3pt', lineHeight: 1.45 }}>{sec.text}</div>
             </div>
           );
         if (sec.type === 'image')

@@ -59,6 +59,14 @@ an annexure index, and the company stamp. Paste comments in bulk, add annexures 
 the previous submittal, create the next revision with one click, and download everything as one A4 PDF
 (reply sheet → Annexure dividers + PDFs → Previous submittal).
 
+## Quote to Submittal
+Upload a Greenland quotation PDF (read in the browser with pdf.js – nothing is uploaded). Each quoted pump item
+(title, make, model, kW, rpm, phase, type, arrangement, flow, head, housing, impeller, electrical & mechanical
+accessories, quantity) becomes a pump-schedule row and a technical literature section; the warranty clause feeds the
+draft warranty certificate. Constant documents (company profile, licence, authorization, manufacturer profile,
+references, approvals, ISO, country of origin) and per-model datasheets / drawings / catalogues are saved once in the
+**Document Library** and inserted automatically. Export / import a backup file to use the library on another computer.
+
 ## Engineering Tools
 Eight quick calculators, every input in metric or imperial units (unit dropdown converts in place), live
 results with calculation steps and references, copy-to-clipboard and A4 sheet / PDF in the Greenland format:
@@ -68,8 +76,8 @@ Darcy-Weisbach) · Friction Loss (HW or Darcy-Weisbach with Swamee-Jain, fitting
 shaft / input kW, IEC motor, current) · Affinity Laws (speed or impeller trim) · NPSH available · Tank & Sump.
 
 ## Layout & themes
-Home page with a short intro and six folders – **Hydraulic Calculations**, **Pump Schedule**, **Technical
-Literature**, **Submittal Package**, **Comment Replies**, **Engineering Tools** – reachable from the top navigation (calculators as tabs inside their folder).
+Home page with a short intro and seven folders – **Hydraulic Calculations**, **Pump Schedule**, **Technical
+Literature**, **Submittal Package**, **Comment Replies**, **Engineering Tools**, **Quote to Submittal** – reachable from the top navigation (calculators as tabs inside their folder).
 Dark "glass" design (grid background, glow orbs, frosted cards, Space Grotesk headings) in Greenland green & navy,
 with a light version – toggle with the sun / moon button.
 

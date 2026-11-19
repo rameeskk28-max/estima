@@ -8,10 +8,12 @@ import { LiteratureTab } from './modules/literature/LiteratureTab.jsx';
 import { RepliesTab } from './modules/replies/RepliesTab.jsx';
 import { Home, FOLDERS, CALC_ITEMS, useReveal } from './modules/home/Home.jsx';
 import { TOOL_ITEMS, ToolPage, ToolsFolder } from './modules/tools/ToolsTab.jsx';
+import { QUOTE_ITEMS, QuoteGenerator, DocumentLibrary } from './modules/quote/QuoteTab.jsx';
 
 const SUB = {
   calc: { items: CALC_ITEMS, short: (c) => c.label.replace(' Pump Set', '').replace('Sump / Sewage', 'Sump') },
   tools: { items: TOOL_ITEMS, short: (c) => c.label },
+  quote: { items: QUOTE_ITEMS, short: (c) => c.label },
 };
 import { Toast } from './components/ui.jsx';
 import { BRAND } from './brand.js';
@@ -25,6 +27,7 @@ function parseRoute() {
   const [folder, item] = r.split('/');
   if (folder === 'calc') return { folder: 'calc', item: CALC_PAGES[item] ? item : null };
   if (folder === 'tools') return { folder: 'tools', item: TOOL_ITEMS.some((t) => t.key === item) ? item : null };
+  if (folder === 'quote') return { folder: 'quote', item: item === 'library' ? 'library' : 'generate' };
   if (['schedule', 'literature', 'submittal', 'replies'].includes(folder)) return { folder, item: null };
   return { folder: 'home', item: null };
 }
@@ -201,7 +204,7 @@ function FolderPage({ route, go }) {
   const Page =
     route.folder === 'calc'
       ? CALC_PAGES[route.item]
-      : route.folder === 'tools'
+      : route.folder === 'tools' || route.folder === 'quote'
         ? null
         : { schedule: PumpScheduleTab, literature: LiteratureTab, submittal: SubmittalBuilder, replies: RepliesTab }[route.folder];
   return (
@@ -238,7 +241,7 @@ function FolderPage({ route, go }) {
           </div>
         )}
       </div>
-      {route.folder === 'tools' ? route.item ? <ToolPage key={route.item} toolKey={route.item} /> : <ToolsFolder go={go} /> : Page ? <Page /> : <CalcFolder go={go} />}
+      {route.folder === 'quote' ? route.item === 'library' ? <DocumentLibrary /> : <QuoteGenerator go={go} /> : route.folder === 'tools' ? route.item ? <ToolPage key={route.item} toolKey={route.item} /> : <ToolsFolder go={go} /> : Page ? <Page /> : <CalcFolder go={go} />}
     </div>
   );
 }
@@ -249,7 +252,7 @@ function CalcFolder({ go }) {
   return (
     <div ref={ref}>
       <div className="reveal-up mb-8 max-w-3xl">
-        <span className="font-mono text-xs uppercase tracking-widest text-brand-400">Folder 01</span>
+        <span className="font-mono text-xs uppercase tracking-widest text-brand-400">Folder 02</span>
         <h1 className="mt-2 font-display text-3xl font-bold text-slate-50 sm:text-4xl">Hydraulic Calculations</h1>
         <p className="mt-3 text-slate-400">Each calculator follows the Greenland calculation-sheet format – project information, flow, head-loss table and final head – with a reference for every step.</p>
       </div>

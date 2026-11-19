@@ -119,6 +119,25 @@ for (const t of Object.values(TOOLS)) {
   assert((await PDFDocument.load(b)).getPageCount() >= 1, `tool sheet PDF: ${t.key}`);
 }
 
+// Quote → submittal generator (synthetic quote, no customer data)
+import { generateFromQuote, DEFAULT_LIBRARY, warrantySheet, matchModel } from '../src/lib/quote/generate.js';
+import { guessTemplate } from '../src/lib/quote/parse.js';
+{
+  assert(guessTemplate('SUMP PUMP SET', 'Sewage Pump', false) === 'sump' && guessTemplate('BOOSTER PUMP SET WITH INBUILD VFD', '', true) === 'booster-vfd' && guessTemplate('Hot water recirculation pump set', 'INLINE', false) === 'circulation', 'quote item → literature template');
+  const lib = DEFAULT_LIBRARY();
+  lib.models = [{ id: 'mA', model: '10VR0300NF1B-D5EB' }];
+  assert(matchModel(lib.models, '10vr0300nf1b-d5eb')?.id === 'mA', 'library model matching (case-insensitive)');
+  const q = { header: { quoteNo: 'Q-TEST', customer: 'Test Contracting LLC', warranty: '24 MONTHS FROM DATE OF T&C' }, items: [
+    { title: 'TRANSFER PUMP WITH INBUILD VFD', make: 'FRANKLIN ELECTRIC', model: '10VR0300NF1B-D5EB', kw: 1.1, rpm: 2900, phase: 3, type: 'Vertical Multi stage', arrangement: '1D+1S', flowLps: 1.94, headM: 24, housing: 'SS 316', impeller: 'SS 316', electrical: ['IP66 enclosure'], mechanical: ['Isolation valves.'], vessel: '', header: '1.5"x1.5"', vfd: true, template: 'transfer', qty: 2, include: true },
+    { title: 'SUMP PUMP SET', make: 'FRANKLIN ELECTRIC', model: '50FWC-M-52-1,6M', kw: 1.6, phase: 3, type: 'Sewage Pump', arrangement: '1D+1S', flowLps: 2, headM: 15, electrical: [], mechanical: [], template: 'sump', qty: 1, include: true },
+  ] };
+  const gen = generateFromQuote(q, { projectName: 'Test Project', contractor: 'Test Contracting LLC', material: 'WATER SUPPLY PUMPS', brand: 'FRANKLIN ELECTRIC PUMPS' }, lib);
+  assert(gen.entries.length === 13 && gen.entries.filter((e) => e.kind === 'technical').length === 2 && gen.entries.at(-1).kind === 'warranty', 'generated index: library docs + 1 literature section per item + warranty');
+  assert(gen.schedule.rows[0].qty === '2' && gen.schedule.rows[0].starter === 'VFD' && gen.literature[0].libModel === 'mA', 'schedule row & datasheet link from quote');
+  const wb = await buildCalcSheetPdf(warrantySheet({ projectName: 'Test' }, gen.warranty, lib.settings), project, logo);
+  assert((await PDFDocument.load(wb)).getPageCount() >= 1 && gen.warranty.period.includes('24 MONTHS'), 'warranty certificate from quote clause');
+}
+
 // Consultant comment reply package
 import { newReply, newComment, newAnnexure, annexureSlot, prevSlot, replySheet } from '../src/lib/replies.js';
 import { buildReplyPdf } from '../src/lib/pdf/replyPdf.js';

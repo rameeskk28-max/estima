@@ -4,6 +4,7 @@ import { renderCalcSheet } from './calcSheet.js';
 import { renderManualSchedule } from './schedulePdf.js';
 import { renderLiterature, embedImage, dataUrlToImage } from './literaturePdf.js';
 import { literatureLabel } from '../literature.js';
+import { warrantySheet, DEFAULT_LIBRARY } from '../quote/generate.js';
 import { fmt, lpsToM3h, mToBar } from '../hydraulics.js';
 import { SECTION_CATEGORIES } from '../calcs/engine.js';
 
@@ -12,22 +13,33 @@ const pad2 = (n) => String(n).padStart(2, '0');
 /**
  * Build the section plan: which items go into each section.
  */
+const strip = (n) => n.replace(/\.pdf$/i, '');
+
+/** Files for a literature: its own uploads + the matched pump-model library entry. */
+export function literatureFiles(l, files, kind) {
+  return [...(files[`lit-${l.id}-${kind}`] || []), ...(l.libModel ? files[`libm-${l.libModel}-${kind}`] || [] : [])];
+}
+
 export function buildPlan(entries, duties, files, literature = []) {
   const included = entries.filter((e) => e.include !== false);
   return included.map((e, idx) => {
     const items = [];
     if (e.kind === 'schedule') items.push({ type: 'schedule', label: 'Pump & Equipment Schedule' });
+    if (e.kind === 'warranty') items.push({ type: 'warranty', label: 'Certificate of Warranty – Draft' });
     if (e.kind === 'technical') {
-      const lits = literature.filter((l) => l.category === e.category);
-      // Order: technical literature → pump datasheets & curves → calculation sheets → drawings → other uploads
+      const lits = e.litId ? literature.filter((l) => l.id === e.litId) : literature.filter((l) => l.category === e.category);
+      // Order: technical literature → pump datasheets & curves → catalogues → calculation sheets → drawings → other uploads
       lits.forEach((l) => items.push({ type: 'literature', lit: l, label: literatureLabel(l) }));
-      lits.forEach((l) => (files[`lit-${l.id}-datasheet`] || []).forEach((f) => items.push({ type: 'pdf', file: f, label: `Pump Datasheet & Curves – ${f.name.replace(/\.pdf$/i, '')}` })));
-      duties
-        .filter((d) => d.category === e.category && d.sheet)
-        .forEach((d) => items.push({ type: 'calc', duty: d, label: `Calculation Sheet – ${d.tag} (${d.calcType})` }));
-      lits.forEach((l) => (files[`lit-${l.id}-drawing`] || []).forEach((f) => items.push({ type: 'pdf', file: f, label: `Drawing – ${f.name.replace(/\.pdf$/i, '')}` })));
+      lits.forEach((l) => literatureFiles(l, files, 'datasheet').forEach((f) => items.push({ type: 'pdf', file: f, label: `Pump Datasheet & Curves – ${strip(f.name)}` })));
+      lits.forEach((l) => literatureFiles(l, files, 'catalogue').forEach((f) => items.push({ type: 'pdf', file: f, label: `Catalogue – ${strip(f.name)}` })));
+      if (!e.litId)
+        duties
+          .filter((d) => d.category === e.category && d.sheet)
+          .forEach((d) => items.push({ type: 'calc', duty: d, label: `Calculation Sheet – ${d.tag} (${d.calcType})` }));
+      lits.forEach((l) => literatureFiles(l, files, 'drawing').forEach((f) => items.push({ type: 'pdf', file: f, label: `Drawing – ${strip(f.name)}` })));
     }
-    (files[e.id] || []).forEach((f) => items.push({ type: 'pdf', file: f, label: f.name.replace(/\.pdf$/i, '') }));
+    if (e.libSlot) (files[e.libSlot] || []).forEach((f) => items.push({ type: 'pdf', file: f, label: strip(f.name) }));
+    (files[e.id] || []).forEach((f) => items.push({ type: 'pdf', file: f, label: strip(f.name) }));
     return { entry: e, number: idx + 1, items };
   });
 }
@@ -37,7 +49,7 @@ export function buildPlan(entries, duties, files, literature = []) {
  * @param {{project: object, entries: object[], duties: object[], files: Record<string, {name:string, bytes:ArrayBuffer|Uint8Array}[]>, logo?: {bytes:ArrayBuffer, type:string}}} input
  * @param {(msg: string) => void} [onProgress]
  */
-export async function compileSubmittal({ project = {}, entries = [], duties = [], files = {}, logo, schedule, literature = [] }, onProgress = () => {}) {
+export async function compileSubmittal({ project = {}, entries = [], duties = [], files = {}, logo, schedule, literature = [], warranty, librarySettings }, onProgress = () => {}) {
   const doc = await PDFDocument.create();
   const fonts = await loadFonts(doc);
   const warnings = [];
@@ -86,6 +98,9 @@ export async function compileSubmittal({ project = {}, entries = [], duties = []
       it.startPage = doc.getPageCount() + 1;
       if (it.type === 'schedule') {
         const pages = schedule?.rows?.length ? renderManualSchedule(doc, fonts, schedule, project) : drawSchedule(doc, fonts, project, duties);
+        track(pages, label);
+      } else if (it.type === 'warranty') {
+        const { pages } = await renderCalcSheet(doc, fonts, warrantySheet(project, warranty || {}, librarySettings || DEFAULT_LIBRARY().settings), project, logoImg);
         track(pages, label);
       } else if (it.type === 'literature') {
         const productImg = await embedImage(doc, dataUrlToImage(it.lit.image));

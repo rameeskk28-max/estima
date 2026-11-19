@@ -7,6 +7,8 @@ import { emptyScheduleRow } from './lib/pdf/schedulePdf.js';
 import { newLiterature } from './lib/literature.js';
 import { newReply, annexureSlot, prevSlot } from './lib/replies.js';
 import { TOOLS } from './lib/tools.js';
+import { DEFAULT_LIBRARY } from './lib/quote/generate.js';
+import { makeBackup, isLibrarySlot } from './lib/backup.js';
 
 const Ctx = createContext(null);
 const KEY = 'pump-submittal-v2';
@@ -59,17 +61,24 @@ export function StoreProvider({ children }) {
   const [replies, setReplies] = useState(() => saved?.replies || []);
   const [toolInputs, setToolInputs] = useState(() => Object.fromEntries(Object.values(TOOLS).map((t) => [t.key, { ...t.defaults(), ...(saved?.toolInputs?.[t.key] || {}) }])));
   const [stamp, setStamp] = useState(() => saved?.stamp || null);
+  const [library, setLibrary] = useState(() => {
+    const d = DEFAULT_LIBRARY();
+    const l = saved?.library || {};
+    return { models: l.models || [], settings: { ...d.settings, ...(l.settings || {}), certs: { ...d.settings.certs, ...(l.settings?.certs || {}) } } };
+  });
+  const [warrantyDoc, setWarrantyDoc] = useState(() => saved?.warrantyDoc || { period: 'THREE years from the date of Initial Start', equipment: 'pump sets' });
+  const [quoteDraft, setQuoteDraft] = useState(() => saved?.quoteDraft || null);
   const [files, setFiles] = useState({}); // entryId -> [{id,name,size,pages,bytes}]
   const [logo, setLogo] = useState(saved?.logo || null); // {dataUrl,type,name}
   const [toast, setToast] = useState(null);
 
   useEffect(() => {
     try {
-      localStorage.setItem(KEY, JSON.stringify({ project, entries, duties, inputs, logo, schedule, uiTheme: theme, literature, replies, stamp, toolInputs }));
+      localStorage.setItem(KEY, JSON.stringify({ project, entries, duties, inputs, logo, schedule, uiTheme: theme, literature, replies, stamp, toolInputs, library, warrantyDoc, quoteDraft }));
     } catch {
       /* quota – ignore */
     }
-  }, [project, entries, duties, inputs, logo, schedule, theme, literature, replies, stamp, toolInputs]);
+  }, [project, entries, duties, inputs, logo, schedule, theme, literature, replies, stamp, toolInputs, library, warrantyDoc, quoteDraft]);
 
   useEffect(() => {
     fileStore.all().then((recs) => {
@@ -137,14 +146,16 @@ export function StoreProvider({ children }) {
     setEntries(DEFAULT_INDEX());
     setDuties([]);
     setInputs(defaultInputs());
-    setFiles({});
     setLogo(null);
     setSchedule(DEFAULT_SCHEDULE());
     setLiterature([]);
     setReplies([]);
     setToolInputs(Object.fromEntries(Object.values(TOOLS).map((t) => [t.key, t.defaults()])));
     setStamp(null);
-    await fileStore.clear();
+    // keep the Document Library (constant documents & pump models)
+    for (const r of await fileStore.all()) if (!isLibrarySlot(r.entryId)) await fileStore.remove(r.id);
+    setFiles((m) => Object.fromEntries(Object.entries(m).filter(([k]) => isLibrarySlot(k))));
+    setQuoteDraft(null);
   }, []);
 
   // Logo used in PDFs & previews: custom upload, otherwise the supplier brand logo.
@@ -215,7 +226,74 @@ export function StoreProvider({ children }) {
 
   const setTool = useCallback((key, patch) => setToolInputs((s) => ({ ...s, [key]: patch === null ? TOOLS[key].defaults() : { ...s[key], ...patch } })), []);
 
+  /* ---------- Document library & quote → submittal ---------- */
+  const addModel = useCallback((model) => {
+    const id = uid();
+    setLibrary((l) => ({ ...l, models: [...l.models, { id, model: String(model || '').trim(), notes: '' }] }));
+    return id;
+  }, []);
+  const updateModel = useCallback((id, patch) => setLibrary((l) => ({ ...l, models: l.models.map((m) => (m.id === id ? { ...m, ...patch } : m)) })), []);
+  const removeModel = useCallback(
+    async (id) => {
+      for (const k of ['datasheet', 'drawing', 'catalogue']) for (const f of files[`libm-${id}-${k}`] || []) await removeFile(`libm-${id}-${k}`, f.id);
+      setLibrary((l) => ({ ...l, models: l.models.filter((m) => m.id !== id) }));
+    },
+    [files, removeFile],
+  );
+  const setLibrarySettings = useCallback((patch) => setLibrary((l) => ({ ...l, settings: { ...l.settings, ...patch } })), []);
+
+  /** Apply a generated submittal (from a quote) to the workspace. */
+  const applyQuote = useCallback((gen) => {
+    setProject((p) => ({ ...p, ...gen.project }));
+    setSchedule(gen.schedule);
+    setLiterature((l) => [...l.filter((x) => !x.fromQuote), ...gen.literature]);
+    setEntries(gen.entries);
+    setWarrantyDoc(gen.warranty);
+  }, []);
+
+  /** Download-ready JSON backup of the library or the whole workspace. */
+  const exportBackup = useCallback(
+    (kind) =>
+      makeBackup(
+        kind,
+        kind === 'library' ? { library } : { project, entries, duties, inputs, logo, schedule, literature, replies, stamp, toolInputs, library, warrantyDoc, quoteDraft },
+        files,
+      ),
+    [library, project, entries, duties, inputs, logo, schedule, literature, replies, stamp, toolInputs, warrantyDoc, quoteDraft, files],
+  );
+  /** Restore a backup (from readBackup). Library imports merge; workspace imports replace. */
+  const importBackup = useCallback(async (b) => {
+    for (const f of b.files) await fileStore.put(f);
+    setFiles((m) => {
+      const n = { ...m };
+      for (const f of b.files) n[f.entryId] = [...(n[f.entryId] || []).filter((x) => x.id !== f.id), f].sort((a, c) => (a.order ?? 0) - (c.order ?? 0));
+      return n;
+    });
+    const st = b.state || {};
+    if (st.library)
+      setLibrary((l) => {
+        const ids = new Set(st.library.models.map((m) => m.id));
+        return { models: [...l.models.filter((m) => !ids.has(m.id)), ...st.library.models], settings: { ...l.settings, ...st.library.settings } };
+      });
+    if (b.kind === 'workspace') {
+      if (st.project) setProject(st.project);
+      if (st.entries) setEntries(st.entries);
+      if (st.duties) setDuties(st.duties);
+      if (st.inputs) setInputs(mergeInputs(st.inputs));
+      if ('logo' in st) setLogo(st.logo);
+      if (st.schedule) setSchedule(st.schedule);
+      if (st.literature) setLiterature(st.literature);
+      if (st.replies) setReplies(st.replies);
+      if ('stamp' in st) setStamp(st.stamp);
+      if (st.toolInputs) setToolInputs((t) => ({ ...t, ...st.toolInputs }));
+      if (st.warrantyDoc) setWarrantyDoc(st.warrantyDoc);
+      if ('quoteDraft' in st) setQuoteDraft(st.quoteDraft);
+    }
+  }, []);
+
   const value = {
+    library, setLibrary, addModel, updateModel, removeModel, setLibrarySettings,
+    warrantyDoc, setWarrantyDoc, quoteDraft, setQuoteDraft, applyQuote, exportBackup, importBackup,
     toolInputs, setTool,
     replies, addReply, updateReply, removeReply, stamp, setStamp,
     literature, setLiterature, addLiterature, updateLiterature, removeLiterature,

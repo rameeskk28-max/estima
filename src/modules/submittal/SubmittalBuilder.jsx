@@ -1,12 +1,12 @@
 import { useMemo, useRef, useState } from 'react';
 import {
   Building2, ListOrdered, ArrowUp, ArrowDown, Trash2, Plus, Upload, FileText, FileDown, LoaderCircle, TriangleAlert,
-  CircleCheck, Table, RotateCcw, Eye, Image as ImageIcon, X, Calculator, Package, BookOpen,
+  CircleCheck, Table, RotateCcw, Eye, Image as ImageIcon, X, Calculator, Package, BookOpen, Library, ShieldCheck,
 } from 'lucide-react';
 import { useStore } from '../../store.jsx';
 import { SECTION_CATEGORIES } from '../../lib/calcs/index.js';
 import { DEFAULT_INDEX } from '../../lib/submittalDefaults.js';
-import { compileSubmittal, countPdfPages, buildPlan } from '../../lib/pdf/compile.js';
+import { compileSubmittal, countPdfPages, buildPlan, literatureFiles } from '../../lib/pdf/compile.js';
 import { fmt, lpsToM3h, mToBar } from '../../lib/hydraulics.js';
 import { Card, TextField, Field, downloadBytes, safeName } from '../../components/ui.jsx';
 import { SheetPreviewModal } from '../../components/SheetPreview.jsx';
@@ -170,10 +170,10 @@ function PumpSchedule() {
 }
 
 /* ------------------------------------------------------------------ */
-const KIND_LABEL = { upload: 'Documents', schedule: 'Pump schedule', technical: 'Technical literature' };
+const KIND_LABEL = { upload: 'Documents', schedule: 'Pump schedule', technical: 'Technical literature', warranty: 'Warranty certificate' };
 
 function IndexManager() {
-  const { entries, setEntries, files, duties, uid, removeFile, schedule, literature } = useStore();
+  const { entries, setEntries, files, duties, uid, removeFile, schedule, literature, warrantyDoc } = useStore();
   const update = (id, patch) => setEntries((l) => l.map((e) => (e.id === id ? { ...e, ...patch } : e)));
   const move = (idx, dir) =>
     setEntries((l) => {
@@ -255,15 +255,20 @@ function IndexManager() {
                 {e.kind === 'schedule' && (
                   <AutoItem icon={Table} text={schedule.rows.length ? `Pump Schedule tab – ${schedule.rows.length} pump(s), SOM format` : `Auto-generated from ${duties.length} saved dut${duties.length === 1 ? 'y' : 'ies'} (fill the Pump Schedule tab for the full SOM format)`} />
                 )}
+                {e.libSlot && (
+                  <AutoItem icon={Library} text={(files[e.libSlot] || []).length ? `Document Library – ${(files[e.libSlot] || []).length} file(s)` : 'Document Library – nothing saved yet (Quote to Submittal → Document Library)'} />
+                )}
+                {e.kind === 'warranty' && <AutoItem icon={ShieldCheck} text={`Generated Certificate of Warranty – Draft (${warrantyDoc?.period || 'period not set'})`} />}
                 {e.kind === 'technical' &&
                   literature
-                    .filter((l) => l.category === e.category)
+                    .filter((l) => (e.litId ? l.id === e.litId : l.category === e.category))
                     .map((l) => {
-                      const nd = (files[`lit-${l.id}-datasheet`] || []).length;
-                      const nw = (files[`lit-${l.id}-drawing`] || []).length;
-                      return <AutoItem key={l.id} icon={BookOpen} text={`Technical Literature – ${l.title}${nd || nw ? ` (+ ${nd} datasheet, ${nw} drawing PDF)` : ''}`} />;
+                      const nd = literatureFiles(l, files, 'datasheet').length;
+                      const nw = literatureFiles(l, files, 'drawing').length;
+                      return <AutoItem key={l.id} icon={BookOpen} text={`Technical Literature – ${l.title}${l.model ? ` (${l.model})` : ''} · ${nd} datasheet, ${nw} drawing PDF`} />;
                     })}
                 {e.kind === 'technical' &&
+                  !e.litId &&
                   (calcDuties.length ? (
                     calcDuties.map((d) => <AutoItem key={d.id} icon={Calculator} text={`Hydraulic Calculation – ${d.tag} · ${d.calcType}`} />)
                   ) : (
@@ -288,7 +293,7 @@ const AutoItem = ({ icon: Icon, text }) => (
 
 /* ------------------------------------------------------------------ */
 function CompilePanel() {
-  const { project, entries, duties, files, notify, getLogo, schedule, literature } = useStore();
+  const { project, entries, duties, files, notify, getLogo, schedule, literature, warrantyDoc, library } = useStore();
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState('');
   const [result, setResult] = useState(null);
@@ -309,7 +314,7 @@ function CompilePanel() {
     setResult(null);
     try {
       const res = await compileSubmittal(
-        { project, entries, duties, files, logo: await getLogo(), schedule, literature },
+        { project, entries, duties, files, logo: await getLogo(), schedule, literature, warranty: warrantyDoc, librarySettings: library.settings },
         setProgress,
       );
       const name = `${safeName(project.refNo || 'Submittal')}_Rev${safeName(project.revision || '0')}_${safeName(project.projectName || 'Project')}.pdf`;

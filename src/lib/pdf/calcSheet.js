@@ -1,4 +1,4 @@
-import { PDFDocument, rgb } from 'pdf-lib';
+import { PDFDocument, rgb, degrees } from 'pdf-lib';
 import { A4, C, loadFonts, wrap, drawText, rect, hline, vline, clean, fmtDate } from './theme.js';
 
 const [PW, PH] = A4;
@@ -157,6 +157,23 @@ export async function renderCalcSheet(doc, fonts, sheet, project = {}, logoImg =
     y -= 6;
   };
 
+  // Plain paragraph(s) – "\n" starts a new line
+  const para = (sec) => {
+    if (sec.title) sectionTitle(sec.title);
+    y -= 4;
+    String(sec.text || '')
+      .split('\n')
+      .forEach((pl) => {
+        const lines = pl.trim() ? wrap(fonts.reg, pl, 8.8, W - 8) : [''];
+        lines.forEach((ln) => {
+          ensure(13);
+          drawText(page, ln, { x: L + 4, y: y - 9, size: 8.8, font: /^AUTHORI[SZ]ED|^For:/i.test(pl.trim()) ? fonts.bold : fonts.reg, color: C.text });
+          y -= 12.5;
+        });
+      });
+    y -= 8;
+  };
+
   // Framed picture (e.g. product photo) – sec.pdfImage is an embedded PDFImage
   const imageBox = (sec) => {
     if (!sec.pdfImage) return;
@@ -177,6 +194,7 @@ export async function renderCalcSheet(doc, fonts, sheet, project = {}, logoImg =
     if (sec.type === 'result') resultLine(sec);
     else if (sec.type === 'note') note(sec);
     else if (sec.type === 'image') imageBox(sec);
+    else if (sec.type === 'para') para(sec);
     else {
       sectionTitle(sec.title);
       table(sec);
@@ -207,6 +225,13 @@ export async function renderCalcSheet(doc, fonts, sheet, project = {}, logoImg =
   });
 
   }
+  if (sheet.watermark)
+    pages.forEach((p) => {
+      const size = 120;
+      const w = fonts.bold.widthOfTextAtSize(sheet.watermark, size);
+      const a = (35 * Math.PI) / 180;
+      p.drawText(sheet.watermark, { x: PW / 2 - (w / 2) * Math.cos(a) + (size / 3) * Math.sin(a), y: PH / 2 - (w / 2) * Math.sin(a) - (size / 3) * Math.cos(a), size, font: fonts.bold, color: rgb(0.75, 0.1, 0.1), opacity: 0.12, rotate: degrees(35) });
+    });
   pages.forEach((p, idx) => drawSheetHeader(p, fonts, sheet, project, idx + 1, pages.length, logoImg));
   return { pages };
 }

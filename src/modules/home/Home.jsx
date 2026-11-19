@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, Calculator, TableProperties, BookOpen, Package, MessageSquareReply, Wrench, Check, FileCheck2, Gauge, Building2, ArrowUpDown, Waves, Snowflake, Cylinder } from 'lucide-react';
+import { ArrowRight, Calculator, TableProperties, BookOpen, Package, MessageSquareReply, Wrench, FileInput, Check, FileCheck2, Gauge, Building2, ArrowUpDown, Waves, Snowflake, Cylinder } from 'lucide-react';
 import { useStore } from '../../store.jsx';
 import { CALCULATORS } from '../../lib/calcs/index.js';
 import { fmtN } from '../../lib/ipc.js';
@@ -14,6 +14,20 @@ export const CALC_ITEMS = [
 ];
 
 export const FOLDERS = [
+  {
+    key: 'quote',
+    route: 'quote',
+    label: 'Quote to Submittal',
+    nav: 'Quote',
+    icon: FileInput,
+    tone: 'brand',
+    desc: 'Upload a quotation – pumps are read automatically and the whole submittal is generated with your saved company documents, datasheets and drawings.',
+    items: [
+      { label: 'Read quotation PDF', route: 'quote/generate' },
+      { label: 'Document Library (save once)', route: 'quote/library' },
+      { label: 'Generate full submittal', route: 'quote/generate' },
+    ],
+  },
   {
     key: 'calc',
     route: 'calc',
@@ -178,7 +192,7 @@ function Counter({ to, suffix, tone = 'text-brand-400' }) {
 }
 
 export function Home({ go }) {
-  const { inputs, duties, schedule, literature, entries, replies } = useStore();
+  const { inputs, duties, schedule, literature, entries, replies, library } = useStore();
   const ref = useReveal();
   const booster = useMemo(() => {
     try {
@@ -187,8 +201,8 @@ export function Home({ go }) {
       return null;
     }
   }, [inputs.booster]);
-  const counts = { tools: 8, calc: duties.length, schedule: schedule.rows.length, literature: literature.length, submittal: entries.filter((e) => e.include !== false).length, replies: replies.length };
-  const countLabel = { tools: 'tools', calc: 'saved duties', schedule: 'pumps', literature: 'documents', submittal: 'sections', replies: 'replies' };
+  const counts = { quote: library.models.length, tools: 8, calc: duties.length, schedule: schedule.rows.length, literature: literature.length, submittal: entries.filter((e) => e.include !== false).length, replies: replies.length };
+  const countLabel = { quote: 'pump models', tools: 'tools', calc: 'saved duties', schedule: 'pumps', literature: 'documents', submittal: 'sections', replies: 'replies' };
 
   const strip = ['IPC 2009 APPENDIX E', 'HAZEN-WILLIAMS', 'EQUIVALENT LENGTH METHOD', "BOYLE'S LAW VESSEL SIZING", 'A4 CALCULATION SHEETS', 'SOM PUMP SCHEDULE', 'TECHNICAL LITERATURE', 'SUBMITTAL COMPILER'];
 
@@ -285,7 +299,7 @@ export function Home({ go }) {
         <div className="mx-auto max-w-7xl">
           <div className="reveal-up mx-auto mb-14 max-w-3xl text-center">
             <span className="font-mono text-xs uppercase tracking-widest text-brand-400">Workspace</span>
-            <h2 className="mb-4 mt-3 font-display text-3xl font-bold text-slate-50 sm:text-5xl">Six folders, one workflow</h2>
+            <h2 className="mb-4 mt-3 font-display text-3xl font-bold text-slate-50 sm:text-5xl">Seven folders, one workflow</h2>
             <p className="text-base text-slate-400 sm:text-lg">Everything is grouped by what you deliver. Open a folder to work on its documents – your data is saved automatically in this browser.</p>
           </div>
           <div className="grid gap-6 md:grid-cols-2 lg:gap-8 xl:grid-cols-6">
