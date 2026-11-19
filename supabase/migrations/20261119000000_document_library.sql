@@ -22,6 +22,9 @@ create table if not exists public.library_files (
 );
 create index if not exists library_files_slot_idx on public.library_files (slot);
 
+grant select, insert, update, delete on public.library_state, public.library_files to authenticated;
+revoke all on public.library_state, public.library_files from anon;
+
 alter table public.library_state enable row level security;
 alter table public.library_files enable row level security;
 
