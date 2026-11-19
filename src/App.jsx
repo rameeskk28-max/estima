@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { RotateCcw, Menu, X, Sun, Moon, ChevronDown, ChevronRight, Home as HomeIcon, ArrowRight } from 'lucide-react';
+import { RotateCcw, Menu, X, Sun, Moon, LogOut, ChevronDown, ChevronRight, Home as HomeIcon, ArrowRight } from 'lucide-react';
 import { StoreProvider, useStore } from './store.jsx';
 import { BoosterCalc, TransferCalc, SumpCalc, VesselCalc, ChwCalc } from './modules/calculators/Calculators.jsx';
 import { SubmittalBuilder } from './modules/submittal/SubmittalBuilder.jsx';
@@ -10,6 +10,7 @@ import { Home, FOLDERS, CALC_ITEMS, useReveal } from './modules/home/Home.jsx';
 import { TOOL_ITEMS, ToolPage, ToolsFolder } from './modules/tools/ToolsTab.jsx';
 import { QUOTE_ITEMS, QuoteGenerator, DocumentLibrary } from './modules/quote/QuoteTab.jsx';
 import { ComplianceTab } from './modules/quote/ComplianceTab.jsx';
+import { LoginPage, AuthSplash } from './modules/auth/LoginPage.jsx';
 
 const SUB = {
   calc: { items: CALC_ITEMS, short: (c) => c.label.replace(' Pump Set', '').replace('Sump / Sewage', 'Sump') },
@@ -37,7 +38,7 @@ function Shell() {
   const [route, setRoute] = useState(parseRoute);
   const [menu, setMenu] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  const { toast, theme, setTheme } = useStore();
+  const { toast, theme, setTheme, cloud, cloudSignOut } = useStore();
 
   useEffect(() => {
     const h = () => setRoute(parseRoute());
@@ -99,6 +100,11 @@ function Shell() {
             <button onClick={() => setTheme(light ? 'dark' : 'light')} className="glass-pill flex h-10 w-10 items-center justify-center rounded-xl text-slate-300 transition hover:text-slate-50" title={light ? 'Switch to dark theme' : 'Switch to light theme'} aria-label="Toggle theme">
               {light ? <Moon size={17} /> : <Sun size={17} />}
             </button>
+            {cloud.user && (
+              <button onClick={() => confirm('Sign out of the Pump Engineering Suite?') && cloudSignOut()} className="glass-pill flex h-10 items-center gap-1.5 rounded-xl px-3 text-sm text-slate-300 transition hover:text-slate-50" title="Sign out" aria-label="Sign out">
+                <LogOut size={16} /> <span className="hidden md:inline">Sign out</span>
+              </button>
+            )}
             <button onClick={() => go('submittal')} className="btn-primary hidden !px-5 !py-2.5 sm:inline-flex">
               Compile Submittal
             </button>
@@ -347,7 +353,16 @@ function Footer({ go }) {
 export default function App() {
   return (
     <StoreProvider>
-      <Shell />
+      <Gate />
     </StoreProvider>
   );
+}
+
+/** Password protection: the site opens only after signing in (Supabase accounts). */
+function Gate() {
+  const { cloud } = useStore();
+  if (!cloud.configured) return <Shell />;
+  if (!cloud.ready) return <AuthSplash />;
+  if (!cloud.user) return <LoginPage credit={<DeveloperCredit />} />;
+  return <Shell />;
 }

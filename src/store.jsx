@@ -86,7 +86,7 @@ export function StoreProvider({ children }) {
   const [quoteDraft, setQuoteDraft] = useState(() => saved?.quoteDraft || null);
   const [compliance, setCompliance] = useState(() => ({ ...DEFAULT_COMPLIANCE(), ...(saved?.compliance || {}) }));
   const [files, setFiles] = useState({}); // entryId -> [{id,name,size,pages,bytes}]
-  const [cloudState, setCloudState] = useState({ configured: cloud.cloudConfigured, user: null, status: 'off', msg: '' });
+  const [cloudState, setCloudState] = useState({ configured: cloud.cloudConfigured, ready: !cloud.cloudConfigured, user: null, status: 'off', msg: '' });
   const userRef = useRef(null);
   const filesRef = useRef(files);
   const libraryRef = useRef(null);
@@ -170,10 +170,10 @@ export function StoreProvider({ children }) {
       const was = userRef.current?.id;
       userRef.current = user;
       pulledRef.current = false;
-      setCloudState((c) => ({ ...c, user, status: user ? c.status : 'off', msg: user ? c.msg : '' }));
+      setCloudState((c) => ({ ...c, ready: true, user, status: user ? c.status : 'off', msg: user ? c.msg : '' }));
       if (user && user.id !== was) cloudSync(user);
     };
-    cloud.currentUser().then(apply);
+    cloud.currentUser().then(apply, () => apply(null));
     return cloud.onAuth(apply);
   }, [cloudSync]);
 
