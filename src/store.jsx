@@ -6,6 +6,7 @@ import { BRAND, brandLogoBytes } from './brand.js';
 import { emptyScheduleRow } from './lib/pdf/schedulePdf.js';
 import { newLiterature } from './lib/literature.js';
 import { newReply, annexureSlot, prevSlot } from './lib/replies.js';
+import { TOOLS } from './lib/tools.js';
 
 const Ctx = createContext(null);
 const KEY = 'pump-submittal-v2';
@@ -56,6 +57,7 @@ export function StoreProvider({ children }) {
   const [theme, setThemeState] = useState(() => saved?.uiTheme || 'dark');
   const [literature, setLiterature] = useState(() => saved?.literature || []);
   const [replies, setReplies] = useState(() => saved?.replies || []);
+  const [toolInputs, setToolInputs] = useState(() => Object.fromEntries(Object.values(TOOLS).map((t) => [t.key, { ...t.defaults(), ...(saved?.toolInputs?.[t.key] || {}) }])));
   const [stamp, setStamp] = useState(() => saved?.stamp || null);
   const [files, setFiles] = useState({}); // entryId -> [{id,name,size,pages,bytes}]
   const [logo, setLogo] = useState(saved?.logo || null); // {dataUrl,type,name}
@@ -63,11 +65,11 @@ export function StoreProvider({ children }) {
 
   useEffect(() => {
     try {
-      localStorage.setItem(KEY, JSON.stringify({ project, entries, duties, inputs, logo, schedule, uiTheme: theme, literature, replies, stamp }));
+      localStorage.setItem(KEY, JSON.stringify({ project, entries, duties, inputs, logo, schedule, uiTheme: theme, literature, replies, stamp, toolInputs }));
     } catch {
       /* quota – ignore */
     }
-  }, [project, entries, duties, inputs, logo, schedule, theme, literature, replies, stamp]);
+  }, [project, entries, duties, inputs, logo, schedule, theme, literature, replies, stamp, toolInputs]);
 
   useEffect(() => {
     fileStore.all().then((recs) => {
@@ -140,6 +142,7 @@ export function StoreProvider({ children }) {
     setSchedule(DEFAULT_SCHEDULE());
     setLiterature([]);
     setReplies([]);
+    setToolInputs(Object.fromEntries(Object.values(TOOLS).map((t) => [t.key, t.defaults()])));
     setStamp(null);
     await fileStore.clear();
   }, []);
@@ -210,7 +213,10 @@ export function StoreProvider({ children }) {
     [replies, files, removeFile],
   );
 
+  const setTool = useCallback((key, patch) => setToolInputs((s) => ({ ...s, [key]: patch === null ? TOOLS[key].defaults() : { ...s[key], ...patch } })), []);
+
   const value = {
+    toolInputs, setTool,
     replies, addReply, updateReply, removeReply, stamp, setStamp,
     literature, setLiterature, addLiterature, updateLiterature, removeLiterature,
     getLogo, logoSrc, schedule, setSchedule, importDutiesToSchedule, theme, setTheme,

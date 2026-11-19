@@ -59,9 +59,17 @@ an annexure index, and the company stamp. Paste comments in bulk, add annexures 
 the previous submittal, create the next revision with one click, and download everything as one A4 PDF
 (reply sheet → Annexure dividers + PDFs → Previous submittal).
 
+## Engineering Tools
+Eight quick calculators, every input in metric or imperial units (unit dropdown converts in place), live
+results with calculation steps and references, copy-to-clipboard and A4 sheet / PDF in the Greenland format:
+Unit Converter (flow, pressure/head, length, velocity, power, volume, area, time, temperature, friction rate) ·
+Velocity (with table for all sizes) · Pipe Sizer (velocity + friction-rate limits, Hazen-Williams or
+Darcy-Weisbach) · Friction Loss (HW or Darcy-Weisbach with Swamee-Jain, fittings ΣK) · Pump Power (hydraulic /
+shaft / input kW, IEC motor, current) · Affinity Laws (speed or impeller trim) · NPSH available · Tank & Sump.
+
 ## Layout & themes
-Home page with a short intro and five folders – **Hydraulic Calculations**, **Pump Schedule**, **Technical
-Literature**, **Submittal Package**, **Comment Replies** – reachable from the top navigation (calculators as tabs inside their folder).
+Home page with a short intro and six folders – **Hydraulic Calculations**, **Pump Schedule**, **Technical
+Literature**, **Submittal Package**, **Comment Replies**, **Engineering Tools** – reachable from the top navigation (calculators as tabs inside their folder).
 Dark "glass" design (grid background, glow orbs, frosted cards, Space Grotesk headings) in Greenland green & navy,
 with a light version – toggle with the sun / moon button.
 

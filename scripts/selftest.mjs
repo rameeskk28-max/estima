@@ -107,6 +107,18 @@ const isA4 = (s) => { const [a, b] = [s.width, s.height].sort((x, y) => x - y); 
 assert(sizes.every(isA4), 'every page is A4 (portrait or landscape)');
 for (const s of res.toc) console.log(`  ${String(s.number).padStart(2, '0')} ${s.title.padEnd(62)} p.${s.page}  ${s.items.map((i) => i.label + '@' + i.page).join(', ')}`);
 console.log('warnings:', res.warnings);
+// Engineering tools – reference values
+import { TOOLS, dwLoss } from '../src/lib/tools.js';
+import { convert } from '../src/lib/units.js';
+assert(Math.abs(convert(10, 'L/s', 'US gpm', 'flow') - 158.503) < 0.01 && Math.abs(convert(1, 'bar', 'psi', 'pressure') - 14.5038) < 1e-3 && Math.abs(convert(100, '°C', '°F', 'temperature') - 212) < 1e-9, 'unit conversions (L/s→gpm, bar→psi, °C→°F)');
+assert(Math.abs(dwLoss(0.01, 0.1023, 100, 0.045e-3, 20).f - 0.0196) < 0.0005, 'Darcy-Weisbach friction factor (Swamee-Jain) vs Moody chart');
+assert(TOOLS.sizer.compute(TOOLS.sizer.defaults()).rec.size === 4, 'pipe sizer: 10 L/s GI ≤2.4 m/s & ≤4 m/100 m → 4"');
+assert(TOOLS.power.compute(TOOLS.power.defaults()).sheet.sections.length >= 2, 'tools build A4 sheets');
+for (const t of Object.values(TOOLS)) {
+  const b = await buildCalcSheetPdf(t.compute(t.defaults()).sheet, project, logo);
+  assert((await PDFDocument.load(b)).getPageCount() >= 1, `tool sheet PDF: ${t.key}`);
+}
+
 // Consultant comment reply package
 import { newReply, newComment, newAnnexure, annexureSlot, prevSlot, replySheet } from '../src/lib/replies.js';
 import { buildReplyPdf } from '../src/lib/pdf/replyPdf.js';

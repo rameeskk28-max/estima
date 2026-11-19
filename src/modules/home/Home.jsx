@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, Calculator, TableProperties, BookOpen, Package, MessageSquareReply, Check, FileCheck2, Gauge, Building2, ArrowUpDown, Waves, Snowflake, Cylinder } from 'lucide-react';
+import { ArrowRight, Calculator, TableProperties, BookOpen, Package, MessageSquareReply, Wrench, Check, FileCheck2, Gauge, Building2, ArrowUpDown, Waves, Snowflake, Cylinder } from 'lucide-react';
 import { useStore } from '../../store.jsx';
 import { CALCULATORS } from '../../lib/calcs/index.js';
 import { fmtN } from '../../lib/ipc.js';
@@ -18,6 +18,7 @@ export const FOLDERS = [
     key: 'calc',
     route: 'calc',
     label: 'Hydraulic Calculations',
+    nav: 'Calculations',
     icon: Calculator,
     tone: 'brand',
     desc: 'Five calculators in the Greenland calculation-sheet format – every step with its reference, ready as an A4 sheet.',
@@ -27,6 +28,7 @@ export const FOLDERS = [
     key: 'schedule',
     route: 'schedule',
     label: 'Pump Schedule',
+    nav: 'Schedule',
     icon: TableProperties,
     tone: 'navy',
     desc: 'SOM-format pump schedule – specified vs proposed duty, model, MOC, motor and starter data.',
@@ -36,6 +38,7 @@ export const FOLDERS = [
     key: 'literature',
     route: 'literature',
     label: 'Technical Literature',
+    nav: 'Literature',
     icon: BookOpen,
     tone: 'brand',
     desc: 'Transfer, booster (with / without VFD), circulation and sump literature with datasheet & drawing uploads.',
@@ -45,6 +48,7 @@ export const FOLDERS = [
     key: 'submittal',
     route: 'submittal',
     label: 'Submittal Package',
+    nav: 'Submittal',
     icon: Package,
     tone: 'navy',
     desc: 'Project header, 14-point UAE index, PDF uploads and one-click compile to a single A4 submittal.',
@@ -54,10 +58,26 @@ export const FOLDERS = [
     key: 'replies',
     route: 'replies',
     label: 'Comment Replies',
+    nav: 'Replies',
     icon: MessageSquareReply,
     tone: 'brand',
     desc: 'Reply to consultant comments per submittal revision – status, annexure references, annexure PDFs and the previous submittal in one A4 PDF.',
     items: [{ label: 'Comments, replies & status', route: 'replies' }, { label: 'Annexures & previous submittal', route: 'replies' }, { label: 'Combined A4 reply PDF', route: 'replies' }],
+  },
+  {
+    key: 'tools',
+    route: 'tools',
+    label: 'Engineering Tools',
+    nav: 'Tools',
+    icon: Wrench,
+    tone: 'navy',
+    desc: 'Quick pump & piping calculators in metric or imperial units – each prints as an A4 sheet.',
+    items: [
+      { label: 'Unit converter & velocity', route: 'tools/converter' },
+      { label: 'Pipe sizer & friction loss', route: 'tools/sizer' },
+      { label: 'Pump power & affinity laws', route: 'tools/power' },
+      { label: 'NPSH, tank & sump', route: 'tools/npsh' },
+    ],
   },
 ];
 
@@ -167,8 +187,8 @@ export function Home({ go }) {
       return null;
     }
   }, [inputs.booster]);
-  const counts = { calc: duties.length, schedule: schedule.rows.length, literature: literature.length, submittal: entries.filter((e) => e.include !== false).length, replies: replies.length };
-  const countLabel = { calc: 'saved duties', schedule: 'pumps', literature: 'documents', submittal: 'sections', replies: 'replies' };
+  const counts = { tools: 8, calc: duties.length, schedule: schedule.rows.length, literature: literature.length, submittal: entries.filter((e) => e.include !== false).length, replies: replies.length };
+  const countLabel = { tools: 'tools', calc: 'saved duties', schedule: 'pumps', literature: 'documents', submittal: 'sections', replies: 'replies' };
 
   const strip = ['IPC 2009 APPENDIX E', 'HAZEN-WILLIAMS', 'EQUIVALENT LENGTH METHOD', "BOYLE'S LAW VESSEL SIZING", 'A4 CALCULATION SHEETS', 'SOM PUMP SCHEDULE', 'TECHNICAL LITERATURE', 'SUBMITTAL COMPILER'];
 
@@ -265,7 +285,7 @@ export function Home({ go }) {
         <div className="mx-auto max-w-7xl">
           <div className="reveal-up mx-auto mb-14 max-w-3xl text-center">
             <span className="font-mono text-xs uppercase tracking-widest text-brand-400">Workspace</span>
-            <h2 className="mb-4 mt-3 font-display text-3xl font-bold text-slate-50 sm:text-5xl">Five folders, one workflow</h2>
+            <h2 className="mb-4 mt-3 font-display text-3xl font-bold text-slate-50 sm:text-5xl">Six folders, one workflow</h2>
             <p className="text-base text-slate-400 sm:text-lg">Everything is grouped by what you deliver. Open a folder to work on its documents – your data is saved automatically in this browser.</p>
           </div>
           <div className="grid gap-6 md:grid-cols-2 lg:gap-8 xl:grid-cols-6">
@@ -277,7 +297,7 @@ export function Home({ go }) {
                 role="link"
                 tabIndex={0}
                 onKeyDown={(e) => e.key === 'Enter' && go(f.route)}
-                className={`card tilt-card reveal-up group cursor-pointer rounded-3xl p-7 sm:p-8 ${i < 2 ? 'xl:col-span-3' : 'xl:col-span-2'} ${i === 4 ? 'md:col-span-2 xl:col-span-2' : ''} ${f.tone === 'brand' ? 'hover:border-brand-500/50' : 'hover:border-navy-400/50'}`}
+                className={`card tilt-card reveal-up group cursor-pointer rounded-3xl p-7 sm:p-8 xl:col-span-2 ${f.tone === 'brand' ? 'hover:border-brand-500/50' : 'hover:border-navy-400/50'}`}
                 style={{ transitionDelay: `${i * 90}ms` }}
               >
                 <div className="tilt-card-content">

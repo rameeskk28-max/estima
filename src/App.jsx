@@ -7,6 +7,12 @@ import { PumpScheduleTab } from './modules/schedule/PumpScheduleTab.jsx';
 import { LiteratureTab } from './modules/literature/LiteratureTab.jsx';
 import { RepliesTab } from './modules/replies/RepliesTab.jsx';
 import { Home, FOLDERS, CALC_ITEMS, useReveal } from './modules/home/Home.jsx';
+import { TOOL_ITEMS, ToolPage, ToolsFolder } from './modules/tools/ToolsTab.jsx';
+
+const SUB = {
+  calc: { items: CALC_ITEMS, short: (c) => c.label.replace(' Pump Set', '').replace('Sump / Sewage', 'Sump') },
+  tools: { items: TOOL_ITEMS, short: (c) => c.label },
+};
 import { Toast } from './components/ui.jsx';
 import { BRAND } from './brand.js';
 
@@ -18,6 +24,7 @@ function parseRoute() {
   if (LEGACY[r]) r = LEGACY[r];
   const [folder, item] = r.split('/');
   if (folder === 'calc') return { folder: 'calc', item: CALC_PAGES[item] ? item : null };
+  if (folder === 'tools') return { folder: 'tools', item: TOOL_ITEMS.some((t) => t.key === item) ? item : null };
   if (['schedule', 'literature', 'submittal', 'replies'].includes(folder)) return { folder, item: null };
   return { folder: 'home', item: null };
 }
@@ -62,7 +69,7 @@ function Shell() {
             <span className="rounded-xl bg-white px-2.5 py-1.5 shadow-lg shadow-brand-500/10 transition-transform group-hover:scale-[1.03]">
               <img src={BRAND.logoUrl} alt={BRAND.legalName} className="h-7 w-auto" />
             </span>
-            <span className="hidden font-display text-sm font-bold leading-tight tracking-tight text-slate-50 xl:block">
+            <span className="hidden font-display text-sm font-bold leading-tight tracking-tight text-slate-50 2xl:block">
               Pump Engineering
               <br />
               <span className="text-brand-400">Suite</span>
@@ -73,12 +80,15 @@ function Shell() {
             <NavLink active={route.folder === 'home'} onClick={() => go('')}>
               Home
             </NavLink>
-            <CalcMenu active={route.folder === 'calc'} go={go} />
-            {FOLDERS.slice(1).map((f) => (
-              <NavLink key={f.key} active={route.folder === f.key} onClick={() => go(f.route)}>
-                {f.label}
-              </NavLink>
-            ))}
+            {FOLDERS.map((f) =>
+              SUB[f.key] ? (
+                <DropMenu key={f.key} folder={f} active={route.folder === f.key} go={go} />
+              ) : (
+                <NavLink key={f.key} active={route.folder === f.key} onClick={() => go(f.route)}>
+                  {f.nav || f.label}
+                </NavLink>
+              ),
+            )}
           </nav>
 
           <div className="flex items-center gap-2">
@@ -100,13 +110,13 @@ function Shell() {
             </button>
             {FOLDERS.map((f) => (
               <div key={f.key} className="py-1.5">
-                <button onClick={() => go(f.key === 'calc' ? 'calc' : f.route)} className="flex items-center gap-2 text-base font-medium text-slate-200">
+                <button onClick={() => go(f.key)} className="flex items-center gap-2 text-base font-medium text-slate-200">
                   <f.icon size={16} className="text-brand-400" /> {f.label}
                 </button>
-                {f.key === 'calc' && (
+                {SUB[f.key] && (
                   <div className="ml-6 mt-1 space-y-1 border-l border-line pl-3">
-                    {CALC_ITEMS.map((c) => (
-                      <button key={c.key} onClick={() => go(`calc/${c.key}`)} className="block text-sm text-slate-400 hover:text-slate-50">
+                    {SUB[f.key].items.map((c) => (
+                      <button key={c.key} onClick={() => go(`${f.key}/${c.key}`)} className="block text-sm text-slate-400 hover:text-slate-50">
                         {c.label}
                       </button>
                     ))}
@@ -141,7 +151,8 @@ function NavLink({ active, onClick, children }) {
   );
 }
 
-function CalcMenu({ active, go }) {
+function DropMenu({ folder, active, go }) {
+  const items = SUB[folder.key].items;
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
@@ -152,17 +163,17 @@ function CalcMenu({ active, go }) {
   return (
     <div ref={ref} className="relative" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
       <button onClick={() => setOpen((o) => !o)} className={`flex items-center gap-1 rounded-xl px-3.5 py-2 transition ${active ? 'bg-brand-500/15 text-brand-400' : 'text-slate-300 hover:text-slate-50'}`} aria-expanded={open}>
-        Hydraulic Calculations <ChevronDown size={14} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+        {folder.nav || folder.label} <ChevronDown size={14} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
         <div className="absolute left-0 top-full z-50 pt-2">
           <div className="card w-80 rounded-2xl p-2" style={{ background: 'var(--menu-bg, var(--glass-bg))' }}>
-            {CALC_ITEMS.map((c) => (
+            {items.map((c) => (
               <button
                 key={c.key}
                 onClick={() => {
                   setOpen(false);
-                  go(`calc/${c.key}`);
+                  go(`${folder.key}/${c.key}`);
                 }}
                 className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-brand-500/10"
               >
@@ -185,8 +196,14 @@ function CalcMenu({ active, go }) {
 /** Folder header (breadcrumb + tabs) and page content. */
 function FolderPage({ route, go }) {
   const folder = FOLDERS.find((f) => f.key === route.folder);
-  const calcItem = CALC_ITEMS.find((c) => c.key === route.item);
-  const Page = route.folder === 'calc' ? CALC_PAGES[route.item] : { schedule: PumpScheduleTab, literature: LiteratureTab, submittal: SubmittalBuilder, replies: RepliesTab }[route.folder];
+  const sub = SUB[route.folder];
+  const calcItem = sub?.items.find((c) => c.key === route.item);
+  const Page =
+    route.folder === 'calc'
+      ? CALC_PAGES[route.item]
+      : route.folder === 'tools'
+        ? null
+        : { schedule: PumpScheduleTab, literature: LiteratureTab, submittal: SubmittalBuilder, replies: RepliesTab }[route.folder];
   return (
     <div className="pt-6">
       <div className="no-print mb-6 flex flex-wrap items-center justify-between gap-4">
@@ -195,7 +212,7 @@ function FolderPage({ route, go }) {
             <HomeIcon size={13} /> Home
           </button>
           <ChevronRight size={13} />
-          <button onClick={() => go(folder.key === 'calc' ? 'calc' : folder.route)} className={calcItem ? 'hover:text-slate-50' : 'font-semibold text-slate-200'}>
+          <button onClick={() => go(folder.key)} className={calcItem ? 'hover:text-slate-50' : 'font-semibold text-slate-200'}>
             {folder.label}
           </button>
           {calcItem && (
@@ -205,23 +222,23 @@ function FolderPage({ route, go }) {
             </>
           )}
         </nav>
-        {route.folder === 'calc' && (
+        {sub && (
           <div className="card inline-flex flex-wrap gap-1 rounded-2xl p-1.5" role="tablist">
-            {CALC_ITEMS.map((c) => (
+            {sub.items.map((c) => (
               <button
                 key={c.key}
                 role="tab"
                 aria-selected={route.item === c.key}
-                onClick={() => go(`calc/${c.key}`)}
+                onClick={() => go(`${route.folder}/${c.key}`)}
                 className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition sm:text-sm ${route.item === c.key ? 'bg-brand-600 text-white shadow-md shadow-brand-600/25' : 'text-slate-400 hover:text-slate-50'}`}
               >
-                <c.icon size={14} /> {c.label.replace(' Pump Set', '').replace('Sump / Sewage', 'Sump')}
+                <c.icon size={14} /> {sub.short(c)}
               </button>
             ))}
           </div>
         )}
       </div>
-      {Page ? <Page /> : <CalcFolder go={go} />}
+      {route.folder === 'tools' ? route.item ? <ToolPage key={route.item} toolKey={route.item} /> : <ToolsFolder go={go} /> : Page ? <Page /> : <CalcFolder go={go} />}
     </div>
   );
 }
@@ -270,7 +287,7 @@ const LinkedInIcon = ({ size = 14 }) => (
 export function DeveloperCredit({ className = '' }) {
   const d = BRAND.developer;
   return (
-    <span className={`inline-flex items-center gap-1.5 text-xs text-slate-400 ${className}`}>
+    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap text-xs text-slate-400 ${className}`}>
       {d.label}
       <a href={d.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-semibold text-slate-50 underline decoration-brand-500/60 underline-offset-4 transition hover:text-[#4c9be8] hover:decoration-[#4c9be8]" title="Ramees on LinkedIn">
         {d.name}
@@ -301,7 +318,7 @@ function Footer({ go }) {
             Home
           </button>
           {FOLDERS.map((f) => (
-            <button key={f.key} onClick={() => go(f.key === 'calc' ? 'calc' : f.route)} className="hover:text-slate-50">
+            <button key={f.key} onClick={() => go(f.key)} className="hover:text-slate-50">
               {f.label}
             </button>
           ))}
