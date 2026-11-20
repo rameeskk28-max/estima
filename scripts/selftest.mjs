@@ -288,5 +288,26 @@ import { newOrder, costTotals, costRow, orderEntries } from '../src/lib/orders.j
   assert(res.pageCount >= 12, `order file compiled with cover, index, 6 sections (${res.pageCount} pages)`);
 }
 
+// Pump datasheet reader (synthetic Spaix-style layout: labels and values on the same row)
+import { readDatasheet, modelFromFileName } from '../src/lib/datasheet.js';
+import * as pdfjsLegacy from 'pdfjs-dist/legacy/build/pdf.mjs';
+{
+  const d = await PDFDocument.create();
+  const f = await d.embedFont(StandardFonts.Helvetica);
+  const pg = d.addPage([595, 842]);
+  const put = (s2, x, y) => pg.drawText(s2, { x, y, size: 7, font: f });
+  put('Technical data', 267, 798); put('TESTVR04A2-X', 251, 782);
+  put('Make', 71, 566); put('FELE', 198, 566);
+  put('Pump type', 71, 555); put('TESTVR04A2-X', 198, 555);
+  put('Rated flow', 319, 680); put('l/s', 508, 680); put('9.5', 522, 680);
+  put('Nominal head', 319, 668); put('m', 510, 668); put('57.5', 522, 668);
+  put('MOTOR', 71, 125); put('LAFERT T52C075', 70, 112);
+  put('Rated power', 70, 101); put('7.5', 162, 101); put('kW', 201, 101);
+  put('Electric voltage', 70, 90); put('3~', 162, 90); put('400', 176, 90); put('Electric current', 216, 90); put('14.4', 291, 90); put('A', 307, 90);
+  const r = await readDatasheet(await d.save(), pdfjsLegacy, 'x.pdf');
+  assert(r.model === 'TESTVR04A2-X' && r.motorKw === 7.5 && r.current === 14.4 && r.flow === 9.5 && r.motorMake.startsWith('LAFERT') && !r.missing.length, `datasheet read: ${r.model}, ${r.motorKw} kW, ${r.current} A, ${r.flow} l/s`);
+  assert(modelFromFileName('40FWS-V-52-037M-G.pdf') === '40FWS-V-52-037M-G' && modelFromFileName('6_LPS_AT_3_BAR.pdf') === '', 'model from file name (duty-style names ignored)');
+}
+
 if (failures) { console.error(`${failures} failure(s)`); process.exit(1); }
 console.log('All self-tests passed.');

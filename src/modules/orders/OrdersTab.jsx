@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
-import { ClipboardList, Plus, Trash2, FileDown, LoaderCircle, FileInput, Calculator, Hash, FileText, Building2, BookOpen, Copy, Eye } from 'lucide-react';
+import { useMemo, useRef, useState } from 'react';
+import { ClipboardList, Plus, Trash2, FileDown, LoaderCircle, FileInput, Calculator, Hash, FileText, Building2, BookOpen, Copy, Eye, Upload, TriangleAlert, CheckCircle2 } from 'lucide-react';
+import { readDatasheet, modelKey } from '../../lib/datasheet.js';
 import { useStore } from '../../store.jsx';
 import { Card, downloadBytes, safeName } from '../../components/ui.jsx';
 import { FileSlot } from '../../components/FileSlot.jsx';
@@ -40,6 +41,71 @@ export function OrdersTab() {
       }
     }
     notify(n ? `${n} datasheet(s) added from the Document Library` : 'No matching datasheets in the Document Library – upload them here or save them in the library', n ? 'ok' : 'bad');
+  };
+
+  /** Read datasheets: add each file to section 6 and fill / update the costing and item-code rows. */
+  const readDatasheets = async (fileList) => {
+    const list = [...(fileList || [])].filter((f) => /\.pdf$/i.test(f.name) || f.type === 'application/pdf');
+    if (!list.length) return;
+    setBusy('Reading datasheets…');
+    try {
+      const [pdfjs, worker] = await Promise.all([import('pdfjs-dist'), import('pdfjs-dist/build/pdf.worker.min.mjs?url')]);
+      pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
+      const found = [];
+      const recs = [];
+      for (const [k, file] of list.entries()) {
+        setBusy(`Reading ${file.name} (${k + 1}/${list.length})…`);
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        let info;
+        try {
+          info = await readDatasheet(bytes.slice(), pdfjs, file.name);
+        } catch (e) {
+          info = { model: '', motorKw: null, current: null, missing: ['model', 'motor kW', 'rated current'], error: e.message };
+        }
+        found.push({ file: file.name, ...info });
+        recs.push({ name: file.name, size: bytes.length, pages: info.pages || 0, bytes });
+      }
+      await addFiles(orderSlot(o, 'datasheets'), recs);
+      updateOrder(o.id, (cur) => {
+        const costing = [...cur.costing];
+        const items = [...cur.items];
+        const same = (a, b) => {
+          const x = modelKey(a);
+          const y = modelKey(b);
+          return !!x && !!y && (x === y || x.includes(y) || y.includes(x));
+        };
+        for (const f of found) {
+          if (!f.model) continue;
+          // costing: one row per pump set – "Pump set / item" = model, "VFD kW" = motor kW
+          const c = costing.findIndex((r) => same(r.name.split(' – ').pop(), f.model) || same(r.name, f.model));
+          if (c >= 0) costing[c] = { ...costing[c], name: costing[c].name || f.model, vfdKw: costing[c].vfdKw === '' || costing[c].vfdKw == null ? f.motorKw ?? '' : costing[c].vfdKw };
+          else {
+            const blank = costing.findIndex((r) => !r.name && !r.pump && !r.quoted);
+            const row = newCostRow({ name: f.model, vfdKw: f.motorKw ?? '' });
+            if (blank >= 0) costing[blank] = { ...row, id: costing[blank].id };
+            else costing.push(row);
+          }
+          // item codes: model, rated current (qty kept)
+          const i = items.findIndex((r) => same(r.model, f.model));
+          if (i >= 0) items[i] = { ...items[i], model: items[i].model || f.model, current: items[i].current === '' || items[i].current == null ? f.current ?? '' : items[i].current };
+          else {
+            const blank = items.findIndex((r) => !r.model && !r.code);
+            const row = newItemRow({ model: f.model, current: f.current ?? '' });
+            if (blank >= 0) items[blank] = { ...row, id: items[blank].id };
+            else items.push(row);
+          }
+        }
+        const info = [...(cur.datasheetInfo || []).filter((x) => !found.some((f) => f.file === x.file)), ...found.map(({ file, model, motorKw, current, voltage, flow, head, motorMake, selectionRef, missing, textPdf }) => ({ file, model, motorKw, current, voltage, flow, head, motorMake, selectionRef, missing, textPdf }))];
+        return { costing, items, datasheetInfo: info };
+      });
+      const gaps = found.filter((f) => f.missing?.length).length;
+      notify(`${found.length} datasheet(s) read and added${gaps ? ` – ${gaps} with missing values (highlighted, please type them)` : ''}`, gaps ? 'bad' : 'ok');
+    } catch (e) {
+      console.error(e);
+      notify(`Could not read the datasheets: ${e.message}`, 'bad');
+    } finally {
+      setBusy('');
+    }
   };
 
   const compile = async () => {
@@ -175,7 +241,8 @@ export function OrdersTab() {
               <ItemsCard o={o} upd={upd} />
 
               <Card title="6. Pump datasheets" icon={BookOpen} actions={<button className="btn-ghost !py-1 text-xs" onClick={fillDatasheets}><Copy size={13} /> Add from Document Library</button>}>
-                <FileSlot slotId={orderSlot(o, 'datasheets')} label="Attach datasheets of all pumps" />
+                <DatasheetReader busy={busy} onFiles={readDatasheets} info={o.datasheetInfo || []} />
+                <FileSlot slotId={orderSlot(o, 'datasheets')} label="Attach other datasheets (without reading)" />
                 <p className="mt-2 text-[11px] text-slate-500">“Add from Document Library” copies the saved datasheets of the pump models in the item-code table.</p>
               </Card>
             </div>
@@ -318,7 +385,7 @@ function ItemsCard({ o, upd }) {
               <tr key={r.id} className="border-t border-line">
                 <td className="px-1 py-1 text-slate-500">{i + 1}</td>
                 <td className="px-1 py-1">
-                  <input className="field !py-1 text-xs" value={r.code} onChange={(e) => set(r.id, 'code', e.target.value)} aria-label="Item code" />
+                  <input className={`field !py-1 text-xs ${r.model && !r.code ? '!border-amber-500/70' : ''}`} value={r.code} onChange={(e) => set(r.id, 'code', e.target.value)} aria-label="Item code" placeholder={r.model ? 'type item code' : ''} />
                 </td>
                 <td className="px-1 py-1">
                   <input className="field !py-1 text-xs" value={r.model} onChange={(e) => set(r.id, 'model', e.target.value)} aria-label="Pump model" />
@@ -327,7 +394,7 @@ function ItemsCard({ o, upd }) {
                   <input type="number" className="field !w-20 !py-1 text-right text-xs" value={r.qty} onChange={(e) => set(r.id, 'qty', e.target.value)} aria-label="Qty" />
                 </td>
                 <td className="px-1 py-1">
-                  <input type="number" step="any" className="field !w-28 !py-1 text-right text-xs" value={r.current} onChange={(e) => set(r.id, 'current', e.target.value)} aria-label="Rated current" />
+                  <input type="number" step="any" className={`field !w-28 !py-1 text-right text-xs ${r.model && (r.current === '' || r.current == null) ? '!border-amber-500/70 !bg-amber-500/10' : ''}`} value={r.current} onChange={(e) => set(r.id, 'current', e.target.value)} aria-label="Rated current" placeholder={r.model ? 'type A' : ''} />
                 </td>
                 <td>
                   <button className="btn-ghost !p-1 hover:!text-red-400" onClick={() => upd({ items: o.items.filter((x) => x.id !== r.id) })} aria-label="Remove item">
@@ -340,5 +407,64 @@ function ItemsCard({ o, upd }) {
         </table>
       </div>
     </Card>
+  );
+}
+
+function DatasheetReader({ busy, onFiles, info }) {
+  const ref = useRef(null);
+  return (
+    <div className="mb-3">
+      <div
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => (e.preventDefault(), onFiles(e.dataTransfer.files))}
+        onClick={() => !busy && ref.current?.click()}
+        className="flex cursor-pointer flex-col items-center gap-1 rounded-2xl border-2 border-dashed border-brand-500/40 bg-brand-500/5 p-5 text-center transition hover:border-brand-500"
+      >
+        {busy ? <LoaderCircle size={22} className="animate-spin text-brand-400" /> : <Upload size={22} className="text-brand-400" />}
+        <div className="text-sm font-semibold text-slate-50">Upload & read pump datasheets – several at once</div>
+        <div className="text-[11px] text-slate-400">Model, motor kW and rated current are filled into the costing and item-code tables; the files are added below.</div>
+        <input ref={ref} type="file" accept="application/pdf,.pdf" multiple className="hidden" onChange={(e) => (onFiles(e.target.files), (e.target.value = ''))} />
+      </div>
+      {info.length > 0 && (
+        <div className="mt-2 overflow-auto">
+          <table className="w-full min-w-[640px] text-xs">
+            <thead className="text-left text-slate-400">
+              <tr>
+                <th className="px-1 py-1">Datasheet</th>
+                <th className="px-1 py-1">Model</th>
+                <th className="px-1 py-1 text-right">Motor kW</th>
+                <th className="px-1 py-1 text-right">Rated current</th>
+                <th className="px-1 py-1">Duty</th>
+                <th className="px-1 py-1">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {info.map((f) => (
+                <tr key={f.file} className="border-t border-line">
+                  <td className="max-w-[180px] truncate px-1 py-1 text-slate-300" title={f.file}>
+                    {f.file}
+                  </td>
+                  <td className="px-1 py-1 font-semibold text-slate-100">{f.model || '–'}</td>
+                  <td className="px-1 py-1 text-right">{f.motorKw ?? '–'}</td>
+                  <td className="px-1 py-1 text-right">{f.current != null ? `${f.current} A` : '–'}</td>
+                  <td className="px-1 py-1 text-slate-400">{f.flow ? `${f.flow} l/s @ ${f.head} m` : '–'}</td>
+                  <td className="px-1 py-1">
+                    {f.missing?.length ? (
+                      <span className="flex items-center gap-1 text-amber-400">
+                        <TriangleAlert size={12} /> {f.textPdf === false ? 'image PDF – ' : ''}type {f.missing.join(', ')}
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1 text-emerald-400">
+                        <CheckCircle2 size={12} /> read
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }

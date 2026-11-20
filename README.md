@@ -170,3 +170,8 @@ net cost = sum × qty, quoted value, net margin, **markup on cost**) · **5** it
 current) · **6** pump datasheets (upload, or copy from the Document Library). "Compile order file" builds one
 indexed A4 PDF (internal cover, index, section dividers, page numbers), compressed. "New order from last
 quotation" pre-fills details, costing rows and models from Quote → Submittal.
+
+**Upload & read pump datasheets** (section 6, several at once): text datasheets (Franklin / Spaix® layout,
+plus generic "Rated current … A", "P2 … kW") fill the model, motor kW (→ VFD kW) and rated current into the
+costing and item-code tables – one row per pump, matched by model; the files are added to section 6.
+Image-only PDFs give the model from the file name; missing values are highlighted to type.

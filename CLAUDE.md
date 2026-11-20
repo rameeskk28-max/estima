@@ -105,4 +105,5 @@ All tools / Current project), calculators with inputs left + sticky results righ
 workflow (Drawings: multi-file upload + auto type riser/plans/ignore · Building: levels, pump level, served range
 / destination · Floors: per-floor drawing dropdown + typed fixtures (`drawing.floorFix`), building totals, critical
 floor · Review: editable calculator inputs in `drawing.review`, Save to Submittal via `saveDuty(key, result, inputs)`) → transfer/sump from drawings (own routes `calc/drawing-transfer|sump`,
-tank/pit notes via `findTanks`, main via `mainRoute`, plan route optional) → Order Processing folder.
+tank/pit notes via `findTanks`, main via `mainRoute`, plan route optional) → Order Processing folder → datasheet reader (`src/lib/datasheet.js`, Spaix layout: Pump type, MOTOR, Rated power, Electric
+current; no item code on Spaix sheets) filling costing + item-code rows.
