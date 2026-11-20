@@ -235,5 +235,14 @@ import { buildingResult, calcPatch, levelsWithHeight, defaultDrawing } from '../
   assert(patch.rows[0].item === 'Straight Pipe' && patch.rows[0].length === 8 + 10 && patch.staticHeight === 9 && patch.fixtures.length === 2, 'building: calculator rows (riser + route), static and fixtures prepared');
 }
 
+// PDF drawings: scale from the sheet, level order by name
+import { scaleFromTexts } from '../src/lib/drawing/readPdf.js';
+import { levelsFromTexts } from '../src/lib/drawing/readDwg.js';
+{
+  assert(scaleFromTexts([{ text: '1 : 100' }, { text: '1 : 100' }, { text: '1:50' }]) === 100, 'pdf drawing: scale 1:100 read from the sheet');
+  const lv = levelsFromTexts(['ROOF', '2nd FLOOR', 'GROUND FLOOR', 'BASEMENT FLOOR', 'PODIUM-1', '1st FLOOR'].map((t, i) => ({ text: t, x: 0, y: i })));
+  assert(lv.join('|') === 'BASEMENT FLOOR|GROUND FLOOR|PODIUM-1|1st FLOOR|2nd FLOOR|ROOF', `levels ordered by name, not drawing position (${lv.join(', ')})`);
+}
+
 if (failures) { console.error(`${failures} failure(s)`); process.exit(1); }
 console.log('All self-tests passed.');

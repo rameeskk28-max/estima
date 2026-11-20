@@ -44,7 +44,8 @@ export function buildingResult(d, { duty = 1, designFlowLps = null } = {}) {
   const fixtures = {};
   for (const p of d.plans) {
     const floors = Math.max(1, p.levels?.length || p.floors || 1);
-    for (const [kind, n] of Object.entries(p.summary?.fixtures || {})) fixtures[kind] = (fixtures[kind] || 0) + n * floors;
+    const typed = p.manual && Object.values(p.manual).some((v) => v !== undefined && v !== null && v !== '') ? p.manual : null;
+    for (const [kind, n] of Object.entries(typed || p.summary?.fixtures || {})) if (Number(n) > 0) fixtures[kind] = (fixtures[kind] || 0) + Number(n) * floors;
   }
   const totalWsfu = Object.entries(fixtures).reduce((s, [k, n]) => s + n * fixtureWsfu(k), 0);
   const demand = ipcDemandGpm(totalWsfu, d.supplyType);

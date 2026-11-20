@@ -41,7 +41,7 @@ data only). Browser checks: Playwright with the preinstalled Chromium against `n
 | Quote → submittal (rule-based quote reader, generator, warranty, document library UI) | `src/lib/quote/parse.js`, `src/lib/quote/generate.js`, `src/modules/quote/QuoteTab.jsx` |
 | Technical compliance statement (spec → clause rows, GL TCS layout) | `src/lib/compliance/{spec,readSpec,compliancePdf}.js`, `src/modules/quote/ComplianceTab.jsx` |
 | Consultant comment replies (4 columns + annexures, stamp) | `src/lib/replies.js`, `src/lib/pdf/replyPdf.js`, `src/modules/replies/RepliesTab.jsx` |
-| Calculation from drawing (DWG → network → critical route → calculator) | `src/lib/drawing/{flatten,network,ppr,building,draw,readDwg}.js`, `src/modules/drawing/DrawingTab.jsx` (route `#/calc/drawing`) |
+| Calculation from drawing (DWG → network → critical route → calculator) | `src/lib/drawing/{flatten,network,ppr,building,draw,readDwg,readPdf}.js`, `src/modules/drawing/DrawingTab.jsx` (route `#/calc/drawing`) |
 | Engineering tools (metric + imperial, A4 sheets) | `src/lib/tools.js`, `src/lib/units.js`, `src/modules/tools/ToolsTab.jsx` |
 | Branding / credit | `src/brand.js` (logo, company details, "Designed & developed by Ramees" → LinkedIn) |
 
@@ -87,4 +87,5 @@ engineering tools → quote → submittal + document library + warranty → comp
 manual schedule fields, calc-sheet linking → Supabase cloud library → final PDF compression →
 site-wide login page → login page removed again (site open; cloud sign-in only in Document Library) →
 calculation from DWG drawings (booster/transfer/sump/CHW; tested on Revit-exported plans with layers P-PIPE,
-P-SANR-FIXT, P-PIPE-IDEN; double-line pipes, fittings as blocks, xref background block with sanitary ware).
+P-SANR-FIXT, P-PIPE-IDEN; double-line pipes, fittings as blocks, xref background block with sanitary ware) → PDF drawings (vector CAD PDFs: OCG layers, sheet scale,
+view transform for orientation; fixtures typed/marked by the user).

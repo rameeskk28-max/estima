@@ -37,6 +37,12 @@ const FITTING_RULES = [
   [/heater|geyser|calorifier/i, 'Water Heater'],
 ];
 export function classifyBlock(b) {
+  // symbols grouped from a PDF: their type is assigned by the user (or left unassigned / ignored)
+  if (b.preset) {
+    if (b.kind === 'ignore') return { cls: 'other', kind: '' };
+    if (b.cls === 'fixture') return { cls: 'fixture', kind: b.kind || UNASSIGNED };
+    return { cls: 'fitting', kind: b.kind || 'In-line item' };
+  }
   const n = b.label || b.name || '';
   if (/door|window|glaz|furniture|vanity|mirror|partition/i.test(n) || /^A-/i.test(b.layer || '')) return { cls: 'other', kind: '' };
   for (const [re, kind] of FIXTURE_RULES) if (re.test(n) && !/valve.*(gate|ball|check)/i.test(n)) {
@@ -46,7 +52,8 @@ export function classifyBlock(b) {
   for (const [re, kind] of FITTING_RULES) if (re.test(n)) return { cls: kind === 'Water Heater' ? 'equipment' : 'fitting', kind };
   return { cls: 'other', kind: '' };
 }
-export const fixtureWsfu = (kind) => FIXTURES.find((f) => f.name === kind)?.wsfu ?? 1;
+export const UNASSIGNED = 'Unassigned symbol';
+export const fixtureWsfu = (kind) => (kind === UNASSIGNED ? 0 : FIXTURES.find((f) => f.name === kind)?.wsfu ?? 1);
 
 /* ---------------- geometry helpers ---------------- */
 const len = (a, b) => Math.hypot(b.x - a.x, b.y - a.y);
@@ -166,7 +173,8 @@ export function buildNetwork(flat, opt) {
       }
     }
   }
-  const total = segs.reduce((s, x) => s + x.L, 0);
+  // double-line drawing if most of the long linework pairs up (short bits are fitting outlines / caps)
+  const total = segs.filter((x) => x.L >= 100).reduce((s, x) => s + x.L, 0);
   const doubleMode = !opt.single && paired > 0.25 * total;
   // leftovers: in single-line mode every line; in double-line mode long unpaired lines (likely single-line runs)
   for (const s of segs) {
@@ -246,7 +254,7 @@ export function buildNetwork(flat, opt) {
     const { cls, kind } = classifyBlock(b);
     const box = { minx: b.minx * k, maxx: b.maxx * k, miny: b.miny * k, maxy: b.maxy * k, x: b.x * k, y: b.y * k };
     if (cls === 'fitting') fittings.push({ ...box, kind, label: b.label, id: b.id });
-    else if (cls === 'fixture') fixtures.push({ ...box, kind, label: b.label, id: b.id, layer: b.layer, nested: b.parent != null, wsfu: fixtureWsfu(kind) });
+    else if (cls === 'fixture') fixtures.push({ ...box, kind, label: b.label, sig: b.sig, id: b.id, layer: b.layer, nested: b.parent != null, wsfu: fixtureWsfu(kind) });
     else if (cls === 'equipment') equipment.push({ ...box, kind, label: b.label, id: b.id });
   }
   // fittings and other small in-line blocks (meters, anonymous valve symbols, Revit zw$ fittings).
@@ -554,7 +562,7 @@ export function analyse(net, src, opt = {}) {
   // downstream fixture units per edge (shortest-path tree)
   const wsfuAt = new Array(net.nodes.length).fill(0);
   const fixAt = new Map();
-  for (const f of net.fixtures) f.at = (f.nodes || [f.node]).find((id) => id != null && dist[id] < Infinity && id !== src) ?? null;
+  for (const f of net.fixtures) f.at = f.kind === 'ignore' ? null : (f.nodes || [f.node]).find((id) => id != null && dist[id] < Infinity && id !== src) ?? null;
   for (const f of net.fixtures) if (f.at != null) {
     wsfuAt[f.at] += f.wsfu;
     (fixAt.get(f.at) || fixAt.set(f.at, []).get(f.at)).push(f);
@@ -633,6 +641,7 @@ export function analyse(net, src, opt = {}) {
     results = (main.length ? main : results).sort((a, b) => b.lengthM - a.lengthM);
   }
   const reached = net.fixtures.filter((f) => f.at != null);
+  // (ignored symbols have no outlet)
   return { src, results, critical: results[0] || null, edgeWsfu, totalWsfu: sub[src], reached, unreached: net.fixtures.length - reached.length, evaluate, dist };
 }
 

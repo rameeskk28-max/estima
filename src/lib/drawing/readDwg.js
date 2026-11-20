@@ -21,7 +21,7 @@ async function loadLib() {
  * @returns {Promise<ReturnType<typeof flattenDwg>>}
  */
 export async function readDwgFile(file) {
-  if (!/\.dwg$/i.test(file.name)) throw new Error('Please upload an AutoCAD .dwg file (PDF reading is not supported yet).');
+  if (!/\.dwg$/i.test(file.name)) throw new Error('Please upload an AutoCAD .dwg file or a PDF exported from CAD.');
   const lib = await loadLib();
   const bytes = new Uint8Array(await file.arrayBuffer());
   const { Dwg_File_Type } = await import('@mlightcad/libredwg-web');
@@ -50,5 +50,21 @@ export function levelsFromTexts(texts) {
     const prev = byName.get(k);
     if (!prev || t.x < prev.x) byName.set(k, { name: name.replace(/\s+/g, ' '), y: t.y });
   }
-  return [...byName.values()].sort((a, b) => a.y - b.y).map((l) => l.name);
+  const list = [...byName.values()];
+  // order by meaning (drawings / PDFs may be stored flipped); position only as a fallback
+  const rank = (n) => {
+    const u = n.toUpperCase();
+    let m;
+    if (/BASEMENT|^B\d/.test(u)) return -100 - (Number((u.match(/\d+/) || [1])[0]) || 1);
+    if (/^GROUND|^G\.?F/.test(u)) return 0;
+    if ((m = u.match(/PODIUM[\s-]*(\d+)|^P(\d)$/))) return 10 + Number(m[1] || m[2]);
+    if (/MEZZ/.test(u)) return 30;
+    if ((m = u.match(/^(\d+)(ST|ND|RD|TH)/) || u.match(/^(?:LEVEL[\s-]*|L)(\d+)/))) return 100 + Number(m[1]);
+    if (/SERVICE|TECHNICAL/.test(u)) return 900;
+    if (/LOWER ROOF/.test(u)) return 990;
+    if (/ROOF/.test(u)) return 1000 + (/UPPER/.test(u) ? 1 : 0);
+    return null;
+  };
+  const ranked = list.every((l) => rank(l.name) !== null);
+  return list.sort((a, b) => (ranked ? rank(a.name) - rank(b.name) : a.y - b.y)).map((l) => l.name);
 }

@@ -134,4 +134,8 @@ Upload the riser diagram and floor plans as AutoCAD/Revit **.dwg** files. Everyt
 - **Head per floor** = riser + floor route + static; the worst floor is sent to the Booster / Transfer /
   Sump / Chilled-water calculator with head-loss rows (PPR actual internal diameters), fixtures × floors,
   static height and a drawing page with the highlighted route – review and edit there.
-- PDF drawings are not read yet (use the DWG).
+- **PDF drawings** exported from AutoCAD / Revit (vector, ideally with layers) are read too: lines keep
+  their layer names, the scale comes from the sheet ("1 : 100"), tiny fitting outlines join the pipes.
+  PDFs have no named symbols, so fixture types are typed per plan ("Type / correct fixture counts") or
+  marked by clicking outlets in the Route view; unmarked outlets share the remaining fixture units.
+  Scanned PDFs (pictures) cannot be traced.
