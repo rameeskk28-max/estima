@@ -11,6 +11,7 @@
     "test": "node scripts/selftest.mjs"
   },
   "dependencies": {
+    "@mlightcad/libredwg-web": "^0.8.4",
     "@supabase/supabase-js": "^2.75.0",
     "lucide-react": "^1.75.0",
     "pdf-lib": "^1.17.1",

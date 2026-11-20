@@ -10,6 +10,7 @@ import { Home, FOLDERS, CALC_ITEMS, useReveal } from './modules/home/Home.jsx';
 import { TOOL_ITEMS, ToolPage, ToolsFolder } from './modules/tools/ToolsTab.jsx';
 import { QUOTE_ITEMS, QuoteGenerator, DocumentLibrary } from './modules/quote/QuoteTab.jsx';
 import { ComplianceTab } from './modules/quote/ComplianceTab.jsx';
+import { DrawingTab } from './modules/drawing/DrawingTab.jsx';
 
 const SUB = {
   calc: { items: CALC_ITEMS, short: (c) => c.label.replace(' Pump Set', '').replace('Sump / Sewage', 'Sump') },
@@ -19,7 +20,7 @@ const SUB = {
 import { Toast } from './components/ui.jsx';
 import { BRAND } from './brand.js';
 
-const CALC_PAGES = { booster: BoosterCalc, transfer: TransferCalc, sump: SumpCalc, vessel: VesselCalc, chw: ChwCalc };
+const CALC_PAGES = { booster: BoosterCalc, transfer: TransferCalc, sump: SumpCalc, vessel: VesselCalc, chw: ChwCalc, drawing: DrawingTab };
 const LEGACY = { booster: 'calc/booster', transfer: 'calc/transfer', sump: 'calc/sump', vessel: 'calc/vessel', chw: 'calc/chw' };
 
 function parseRoute() {

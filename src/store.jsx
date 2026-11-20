@@ -10,6 +10,7 @@ import { TOOLS } from './lib/tools.js';
 import { DEFAULT_LIBRARY } from './lib/quote/generate.js';
 import { makeBackup, isLibrarySlot } from './lib/backup.js';
 import * as cloud from './lib/cloud.js';
+import { defaultDrawing } from './lib/drawing/building.js';
 
 const Ctx = createContext(null);
 const KEY = 'pump-submittal-v2';
@@ -85,6 +86,7 @@ export function StoreProvider({ children }) {
   const [warrantyDoc, setWarrantyDoc] = useState(() => saved?.warrantyDoc || { period: 'THREE years from the date of Initial Start', equipment: 'pump sets' });
   const [quoteDraft, setQuoteDraft] = useState(() => saved?.quoteDraft || null);
   const [compliance, setCompliance] = useState(() => ({ ...DEFAULT_COMPLIANCE(), ...(saved?.compliance || {}) }));
+  const [drawing, setDrawing] = useState(() => ({ ...defaultDrawing(), ...(saved?.drawing || {}) }));
   const [files, setFiles] = useState({}); // entryId -> [{id,name,size,pages,bytes}]
   const [cloudState, setCloudState] = useState({ configured: cloud.cloudConfigured, ready: !cloud.cloudConfigured, user: null, status: 'off', msg: '' });
   const userRef = useRef(null);
@@ -98,11 +100,11 @@ export function StoreProvider({ children }) {
 
   useEffect(() => {
     try {
-      localStorage.setItem(KEY, JSON.stringify({ project, entries, duties, inputs, logo, schedule, uiTheme: theme, literature, replies, stamp, toolInputs, library, warrantyDoc, quoteDraft, compliance }));
+      localStorage.setItem(KEY, JSON.stringify({ project, entries, duties, inputs, logo, schedule, uiTheme: theme, literature, replies, stamp, toolInputs, library, warrantyDoc, quoteDraft, compliance, drawing }));
     } catch {
       /* quota – ignore */
     }
-  }, [project, entries, duties, inputs, logo, schedule, theme, literature, replies, stamp, toolInputs, library, warrantyDoc, quoteDraft, compliance]);
+  }, [project, entries, duties, inputs, logo, schedule, theme, literature, replies, stamp, toolInputs, library, warrantyDoc, quoteDraft, compliance, drawing]);
 
   useEffect(() => {
     fileStore.all().then((recs) => {
@@ -263,6 +265,7 @@ export function StoreProvider({ children }) {
     setFiles((m) => Object.fromEntries(Object.entries(m).filter(([k]) => isLibrarySlot(k))));
     setQuoteDraft(null);
     setCompliance(DEFAULT_COMPLIANCE());
+    setDrawing(defaultDrawing());
   }, []);
 
   // Logo used in PDFs & previews: custom upload, otherwise the supplier brand logo.
@@ -363,10 +366,10 @@ export function StoreProvider({ children }) {
     (kind) =>
       makeBackup(
         kind,
-        kind === 'library' ? { library } : { project, entries, duties, inputs, logo, schedule, literature, replies, stamp, toolInputs, library, warrantyDoc, quoteDraft, compliance },
+        kind === 'library' ? { library } : { project, entries, duties, inputs, logo, schedule, literature, replies, stamp, toolInputs, library, warrantyDoc, quoteDraft, compliance, drawing },
         files,
       ),
-    [library, project, entries, duties, inputs, logo, schedule, literature, replies, stamp, toolInputs, warrantyDoc, quoteDraft, compliance, files],
+    [library, project, entries, duties, inputs, logo, schedule, literature, replies, stamp, toolInputs, warrantyDoc, quoteDraft, compliance, drawing, files],
   );
   /** Restore a backup (from readBackup). Library imports merge; workspace imports replace. */
   const importBackup = useCallback(async (b) => {
@@ -396,12 +399,14 @@ export function StoreProvider({ children }) {
       if (st.warrantyDoc) setWarrantyDoc(st.warrantyDoc);
       if ('quoteDraft' in st) setQuoteDraft(st.quoteDraft);
       if (st.compliance) setCompliance(st.compliance);
+      if (st.drawing) setDrawing(st.drawing);
     }
   }, []);
 
   const value = {
     cloud: cloudState, cloudSync, cloudSignIn, cloudSignOut, cloudChangePassword: cloud.changePassword,
     library, setLibrary, addModel, updateModel, removeModel, setLibrarySettings,
+    drawing, setDrawing,
     compliance, setCompliance, warrantyDoc, setWarrantyDoc, quoteDraft, setQuoteDraft, applyQuote, exportBackup, importBackup,
     toolInputs, setTool,
     replies, addReply, updateReply, removeReply, stamp, setStamp,

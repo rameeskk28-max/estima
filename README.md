@@ -117,3 +117,21 @@ saved online and shared by every signed-in team member.
 
 Without these variables the site still works and keeps the library in the browser (backup export/import).
 
+
+## Calculation from Drawing (Calculations → From Drawing (DWG))
+
+Upload the riser diagram and floor plans as AutoCAD/Revit **.dwg** files. Everything runs in the browser
+(LibreDWG WebAssembly, loaded on first use, ~11 MB):
+
+- **Levels** are read from the riser (ROOF, 9th FLOOR, PODIUM-2…); heights use the typical floor height
+  (default 4 m) and every level is editable.
+- **Pipes**: double-line pipes are paired into centre-lines – the gap is the outside diameter (snapped to
+  PPR sizes); single-line drawings use the size labels. Fittings/valves/meters (blocks) join the pipes.
+- **Fixtures** are counted from plumbing blocks at pipe ends (WC, shattaf, basin, sink, shower, bib tap…),
+  once per outlet; each plan asks which floors it covers.
+- The **supply** is found where pipe sizes only step down; the **critical route** is the outlet with the
+  highest loss (flows per section from IPC fixture units). Both can be picked by hand in the Route view.
+- **Head per floor** = riser + floor route + static; the worst floor is sent to the Booster / Transfer /
+  Sump / Chilled-water calculator with head-loss rows (PPR actual internal diameters), fixtures × floors,
+  static height and a drawing page with the highlighted route – review and edit there.
+- PDF drawings are not read yet (use the DWG).

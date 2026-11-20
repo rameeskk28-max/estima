@@ -17,7 +17,7 @@ technical compliance statement and a cloud document library.
 React 19 + Vite 8, Tailwind CSS v4 (`src/index.css`: `@theme`, `@utility`, CSS-variable theming,
 `.theme-light`; dark is default), lucide-react icons, pdf-lib (all PDF output), pdfjs-dist 4.10.38
 (reading PDFs), tesseract.js (OCR of scanned specs, lazy-loaded), @supabase/supabase-js (login +
-cloud library), pako (PDF compression).
+cloud library), pako (PDF compression), @mlightcad/libredwg-web (DWG reading, wasm referenced by path in `readDwg.js` because the package does not export it).
 
 Commands: `npm run dev` · `npm run build` · `npm test` (= `node scripts/selftest.mjs`, synthetic
 data only). Browser checks: Playwright with the preinstalled Chromium against `npx vite preview`.
@@ -41,6 +41,7 @@ data only). Browser checks: Playwright with the preinstalled Chromium against `n
 | Quote → submittal (rule-based quote reader, generator, warranty, document library UI) | `src/lib/quote/parse.js`, `src/lib/quote/generate.js`, `src/modules/quote/QuoteTab.jsx` |
 | Technical compliance statement (spec → clause rows, GL TCS layout) | `src/lib/compliance/{spec,readSpec,compliancePdf}.js`, `src/modules/quote/ComplianceTab.jsx` |
 | Consultant comment replies (4 columns + annexures, stamp) | `src/lib/replies.js`, `src/lib/pdf/replyPdf.js`, `src/modules/replies/RepliesTab.jsx` |
+| Calculation from drawing (DWG → network → critical route → calculator) | `src/lib/drawing/{flatten,network,ppr,building,draw,readDwg}.js`, `src/modules/drawing/DrawingTab.jsx` (route `#/calc/drawing`) |
 | Engineering tools (metric + imperial, A4 sheets) | `src/lib/tools.js`, `src/lib/units.js`, `src/modules/tools/ToolsTab.jsx` |
 | Branding / credit | `src/brand.js` (logo, company details, "Designed & developed by Ramees" → LinkedIn) |
 
@@ -84,4 +85,6 @@ Calculators + submittal builder → Netlify deploy → Excel-format calc sheets,
 animations, themes → technical literature builder → home page folders + credit → comment replies →
 engineering tools → quote → submittal + document library + warranty → compliance statement,
 manual schedule fields, calc-sheet linking → Supabase cloud library → final PDF compression →
-site-wide login page → login page removed again (site open; cloud sign-in only in Document Library).
+site-wide login page → login page removed again (site open; cloud sign-in only in Document Library) →
+calculation from DWG drawings (booster/transfer/sump/CHW; tested on Revit-exported plans with layers P-PIPE,
+P-SANR-FIXT, P-PIPE-IDEN; double-line pipes, fittings as blocks, xref background block with sanitary ware).

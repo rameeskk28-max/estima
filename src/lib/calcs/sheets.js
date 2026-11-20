@@ -17,6 +17,11 @@ function buildSheet({ title, calcType, i, flowSection, flowExtra = [], hl, fh, q
   sections.push(stepsSection('4. FINAL HEAD CALCULATION', fh.steps));
   sections.push({ type: 'result', text: selectedPumpLine(i, qPump, fh.proposed) });
   if (i.remarks) sections.push({ type: 'note', text: i.remarks });
+  // critical pipe route traced from the drawings (Calculations → From Drawing)
+  (i.routeImages || []).forEach((img, k) => {
+    sections.push({ type: 'image', title: k === 0 ? '5. CRITICAL PIPE ROUTE – FROM DRAWING' : '', src: img.src, caption: img.caption, height: 430 });
+  });
+  if (i.routeNote) sections.push({ type: 'note', text: i.routeNote });
   return { docTitle: `HYDRAULIC CALCULATION – ${String(i.system).toUpperCase()}`, calcType, tag: i.tag, service: i.system, sections };
 }
 

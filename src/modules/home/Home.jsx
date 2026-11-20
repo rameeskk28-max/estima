@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, Calculator, TableProperties, BookOpen, Package, MessageSquareReply, Wrench, FileInput, Check, FileCheck2, Gauge, Building2, ArrowUpDown, Waves, Snowflake, Cylinder } from 'lucide-react';
+import { ArrowRight, Calculator, TableProperties, BookOpen, Package, MessageSquareReply, Wrench, FileInput, Check, FileCheck2, Gauge, Building2, ArrowUpDown, Waves, Snowflake, Cylinder, Route } from 'lucide-react';
 import { useStore } from '../../store.jsx';
 import { CALCULATORS } from '../../lib/calcs/index.js';
 import { fmtN } from '../../lib/ipc.js';
@@ -11,6 +11,7 @@ export const CALC_ITEMS = [
   { key: 'sump', label: 'Sump / Sewage Pump Set', icon: Waves, desc: 'Pit volume & emptying time → flow and head' },
   { key: 'chw', label: 'Chilled Water Pump Set', icon: Snowflake, desc: 'Cooling load & ΔT → flow; closed-loop head' },
   { key: 'vessel', label: 'Pressure Vessel', icon: Cylinder, desc: "Boyle's law vessel volume & pre-charge" },
+  { key: 'drawing', label: 'From Drawing (DWG)', icon: Route, desc: 'Read plumbing DWGs – fixtures, pipe routes & fittings → head calculation' },
 ];
 
 export const FOLDERS = [

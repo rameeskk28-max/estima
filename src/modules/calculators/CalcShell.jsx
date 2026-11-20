@@ -83,6 +83,19 @@ export function CalcShell({ calcKey, icon, description, children, pump = true })
             </div>
             <p className="mt-2 text-[11px] text-slate-500">Project, client and consultant are taken from the Submittal Builder → Project Header.</p>
           </Card>
+          {i.routeImages?.length > 0 && (
+            <Card title="Pipe route from drawing" icon={ClipboardList} actions={<button className="btn-ghost !py-1 text-xs" onClick={() => confirm('Remove the drawing route pages from this calculation sheet?') && set({ routeImages: [], routeNote: '' })}>Remove</button>}>
+              <div className="flex flex-wrap gap-3">
+                {i.routeImages.map((img, k) => (
+                  <figure key={k} className="w-56">
+                    <img src={img.src} alt={img.caption} className="rounded-lg border border-line bg-white" />
+                    <figcaption className="mt-1 text-[11px] text-slate-400">{img.caption}</figcaption>
+                  </figure>
+                ))}
+              </div>
+              <p className="mt-2 text-[11px] text-slate-500">Head-loss rows, fixture counts and static height came from Calculations → From Drawing. Edit anything below – the route pages print at the end of the calculation sheet.</p>
+            </Card>
+          )}
           {children(i, set, result)}
           {pump && result?.fh && <FinalHeadCard i={i} set={set} result={result} closedLoop={calcKey === 'chw'} />}
         </div>

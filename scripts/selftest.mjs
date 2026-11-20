@@ -201,5 +201,39 @@ import { compressPdf } from '../src/lib/pdf/compress.js';
   assert((await compressPdf(raw, 'off')) === raw, 'compression off returns the original');
 }
 
+// Drawing → calculation: synthetic double-line plan (riser 50 mm → tee → two 32 mm branches → WC / basin)
+import { buildNetwork, analyse, autoSource, routeRows } from '../src/lib/drawing/network.js';
+import { buildingResult, calcPatch, levelsWithHeight, defaultDrawing } from '../src/lib/drawing/building.js';
+{
+  const L = (ax, ay, bx, by) => ({ a: { x: ax, y: ay }, b: { x: bx, y: by }, layer: 'P-PIPE', color: 5, owner: null });
+  const dbl = (ax, ay, bx, by, od) => {
+    const len = Math.hypot(bx - ax, by - ay), nx = (-(by - ay) / len) * od / 2, ny = ((bx - ax) / len) * od / 2;
+    return [L(ax + nx, ay + ny, bx + nx, by + ny), L(ax - nx, ay - ny, bx - nx, by - ny)];
+  };
+  const lines = [
+    ...dbl(0, 0, 6000, 0, 50), // main from the riser
+    ...dbl(6000, 25, 6000, 4000, 32), // branch up (tee at 6000,0)
+    ...dbl(6025, 0, 12000, 0, 32), // run on after the tee
+  ];
+  const blk = (label, x, y, w = 200) => ({ id: label.length + x, name: label, label, layer: 'P-SANR-FIXT', minx: x - w / 2, maxx: x + w / 2, miny: y - w / 2, maxy: y + w / 2, x, y, parent: null });
+  const flat = { lines, texts: [], blocks: [blk('WC VALVE', 6000, 4150), blk('Wash Basin Angle Valve', 12150, 0)], unitToMm: 1, bbox: {} };
+  const net = buildNetwork(flat, { include: (l) => /PIPE/.test(l.layer) });
+  const ods = [...new Set(net.edges.map((e) => e.od))].sort();
+  assert(net.fixtures.length === 2 && ods.join(',') === '32,50', `drawing: double lines → centre-lines with OD from the gap (${ods}), 2 fixtures`);
+  const src = autoSource(net);
+  assert(Math.abs(net.nodes[src].x) < 100, 'drawing: supply found at the 50 mm end (sizes step down from it)');
+  const res = analyse(net, src, { pn: 'PN20' });
+  assert(res.reached.length === 2 && res.totalWsfu === 3.5, `drawing: both fixtures reached, ${res.totalWsfu} WSFU`);
+  const rows = routeRows(res.critical.items, 'PN20');
+  const pipeM = rows.filter((r) => r.item === 'Straight Pipe').reduce((s2, r) => s2 + r.length, 0);
+  assert(Math.abs(pipeM - (res.critical.target === res.critical.eids.length ? 0 : res.critical.lengthM)) < 0.01 && pipeM > 9.5 && pipeM < 12.5, `drawing: critical route length ${pipeM.toFixed(2)} m`);
+  assert(rows.some((r) => /Tee/.test(r.item)), 'drawing: tee counted on the route');
+  const d = { ...defaultDrawing(), levels: levelsWithHeight(['GROUND FLOOR', '1st FLOOR', '2nd FLOOR', 'ROOF'], 4), pumpLevel: 'GROUND FLOOR', plans: [{ id: 'a', name: 'Typical', levels: ['1st FLOOR', '2nd FLOOR'], summary: { fixtures: { 'Water Closet – Private / Flush Tank': 1, 'Wash Basin / Lavatory': 1 }, frictionM: res.critical.frictionM, lengthM: res.critical.lengthM, rows } }] };
+  const b2 = buildingResult(d, { duty: 1 });
+  assert(b2.totalWsfu === 7 && b2.crit.level === '2nd FLOOR' && Math.abs(b2.crit.stat - 9) < 1e-9, `building: fixtures × floors = ${b2.totalWsfu} WSFU, critical ${b2.crit.level}, static ${b2.crit.stat} m`);
+  const patch = calcPatch(d, b2);
+  assert(patch.rows[0].item === 'Straight Pipe' && patch.rows[0].length === 8 + 10 && patch.staticHeight === 9 && patch.fixtures.length === 2, 'building: calculator rows (riser + route), static and fixtures prepared');
+}
+
 if (failures) { console.error(`${failures} failure(s)`); process.exit(1); }
 console.log('All self-tests passed.');

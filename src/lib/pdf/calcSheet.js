@@ -178,6 +178,7 @@ export async function renderCalcSheet(doc, fonts, sheet, project = {}, logoImg =
   const imageBox = (sec) => {
     if (!sec.pdfImage) return;
     const boxH = sec.height || 170;
+    ensure(boxH + 8 + (sec.title ? 26 : 0)); // keep the title with its picture
     if (sec.title) sectionTitle(sec.title);
     ensure(boxH + 8);
     const bw = sec.boxWidth ? sec.boxWidth * W : W;
@@ -190,7 +191,24 @@ export async function renderCalcSheet(doc, fonts, sheet, project = {}, logoImg =
     y -= boxH + 8;
   };
 
+  // images supplied as data URLs (e.g. pipe route from a drawing) are embedded here
+  const sections = [];
   for (const sec of sheet.sections || []) {
+    if (sec.type === 'image' && sec.src && !sec.pdfImage) {
+      try {
+        const m = /^data:image\/(png|jpe?g);base64,(.*)$/i.exec(sec.src);
+        if (m) {
+          const bytes = Uint8Array.from(atob(m[2]), (c) => c.charCodeAt(0));
+          sections.push({ ...sec, pdfImage: /png/i.test(m[1]) ? await doc.embedPng(bytes) : await doc.embedJpg(bytes) });
+          continue;
+        }
+      } catch {
+        /* skip a broken image */
+      }
+    }
+    sections.push(sec);
+  }
+  for (const sec of sections) {
     if (sec.type === 'result') resultLine(sec);
     else if (sec.type === 'note') note(sec);
     else if (sec.type === 'image') imageBox(sec);
