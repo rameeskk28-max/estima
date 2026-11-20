@@ -6,7 +6,7 @@ import { useStore } from '../../store.jsx';
 import { Card, NumField, SelectField } from '../../components/ui.jsx';
 import { CALCULATORS, SECTION_CATEGORIES } from '../../lib/calcs/index.js';
 import { fmtN } from '../../lib/ipc.js';
-import { buildNetwork, analyse, autoSource, routeRows, fixtureWsfu, UNASSIGNED, findViews, DEFAULT_SYMBOLS, symbolKey, classifyBlock, FITTING_KINDS } from '../../lib/drawing/network.js';
+import { buildNetwork, analyse, autoSource, routeRows, fixtureWsfu, UNASSIGNED, findViews, DEFAULT_SYMBOLS, symbolKey, classifyBlock, FITTING_KINDS, findTanks, mainRoute } from '../../lib/drawing/network.js';
 import { FIXTURES } from '../../lib/ipc.js';
 import { buildingResult, calcPatch, DRAWING_SYSTEMS, levelsWithHeight } from '../../lib/drawing/building.js';
 import { PPR, PN_CLASSES } from '../../lib/drawing/ppr.js';
@@ -63,6 +63,11 @@ function analysePlan(entry, d, flowLps, override = {}, plan = null) {
   const { net } = entry;
   const sys = DRAWING_SYSTEMS[d.system];
   applyFixtureTypes(net, plan);
+  // transfer / sump / loop: the main (largest labelled run) instead of the farthest fixture
+  if (!sys.fixtures && override.src == null && entry.src == null && override.target == null) {
+    const m = mainRoute(net, entry.flat, d.system, entry.nodes);
+    if (m) override = { ...override, src: m.src, target: m.target };
+  }
   const src = override.src ?? entry.src ?? autoSource(net, entry.nodes);
   const res = analyse(net, src, { supplyType: d.supplyType, pn: d.pn, fixtures: sys.fixtures, flowLps: sys.fixtures ? null : flowLps });
   const target = override.target ?? entry.target ?? null;
@@ -108,7 +113,7 @@ function classifyDrawing(flat, fileName, views, levelNames, fixtures) {
   return 'plans';
 }
 
-export function DrawingTab() {
+export function DrawingTab({ preset } = {}) {
   const { drawing: d, setDrawing, inputs, setCalcInputs, saveDuty, project, notify } = useStore();
   const set = (patch) => setDrawing((x) => ({ ...x, ...(typeof patch === 'function' ? patch(x) : patch) }));
   const [busy, setBusy] = useState('');
@@ -121,6 +126,9 @@ export function DrawingTab() {
   const sys = DRAWING_SYSTEMS[d.system] || DRAWING_SYSTEMS.booster;
   const calcKey = sys.calc;
   const step = d.step || 1;
+  useEffect(() => {
+    if (preset && d.system !== preset) setDrawing((x) => ({ ...x, system: preset, review: null }));
+  }, [preset]); // eslint-disable-line react-hooks/exhaustive-deps
   const calcRes = useMemo(() => {
     try {
       return CALCULATORS[calcKey].compute(inputs[calcKey]);
@@ -181,6 +189,7 @@ export function DrawingTab() {
         const levelNames = levelsFromTexts(flat.texts);
         const kind = classifyDrawing(flat, file.name, views, levelNames, fe.net.fixtures.length);
         read.push({ fileId, name: file.name, kind, views: views.length, levelNames, fixtures: fe.net.fixtures.length, pipesM: Math.round(fe.net.edges.reduce((s2, e) => s2 + e.L, 0) / 1000) });
+        read.at(-1).tanks = findTanks(flat, file.name);
       } catch (e) {
         console.error(e);
         notify(e.message || `Could not read ${file.name}`, 'bad');
@@ -203,6 +212,9 @@ export function DrawingTab() {
     for (const p of newPlans) p.levels = p.levels.filter((l) => (taken.has(l) ? false : (taken.add(l), true)));
     set((x) => ({
       files: [...(x.files || []), ...read.map(({ fileId, name, kind, views, levelNames, fixtures, pipesM }) => ({ id: fileId, name, kind, views, levels: levelNames.length, fixtures, pipesM }))],
+      tanks: [...(x.tanks || []), ...read.flatMap((r) => r.tanks || [])].filter((t, i, arr) => arr.findIndex((y) => y.text === t.text) === i),
+      tankVolume: x.tankVolume || (() => { const all = [...(x.tanks || []), ...read.flatMap((r) => r.tanks || [])].filter((t) => t.kind === 'tank' && t.volume); const up = all.find((t) => t.where === 'upper') || all.find((t) => t.where !== 'lower'); return up ? up.volume : ''; })(),
+      pit: x.pit || (() => { const p2 = read.flatMap((r) => r.tanks || []).find((t) => t.kind === 'pit' && t.dims); return p2 ? { L: p2.dims[0], W: p2.dims[1], D: p2.dims[2] } : null; })(),
       plans: [...x.plans, ...newPlans],
       levels,
       pumpLevel: x.pumpLevel && levels.some((l) => l.name === x.pumpLevel) ? x.pumpLevel : levels[0]?.name || '',
@@ -254,6 +266,12 @@ export function DrawingTab() {
     set((x) => ({ plans: x.plans.map((p) => (p.id === planId ? { ...p, summary } : p)) }));
     force((n) => n + 1);
   };
+  // a different system needs a different route (fixture route vs. transfer / discharge main)
+  const lastSystem = useRef(d.system);
+  if (lastSystem.current !== d.system) {
+    for (const e of CACHE.values()) (e.src = undefined), (e.target = undefined);
+    lastSystem.current = d.system;
+  }
   useEffect(() => {
     for (const p of d.plans) if (CACHE.has(p.id)) reanalyse(p.id, {});
   }, [d.pn, d.supplyType, d.system, Math.round(flowLps * 100), JSON.stringify(d.plans.map((p) => [p.manual, p.assign]))]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -469,6 +487,22 @@ export function DrawingTab() {
               </div>
               {sys.fixtures && <SelectField label="Static height" value={d.staticMode} onChange={(v) => set({ staticMode: v, review: null })} options={[{ value: 'positive', label: 'Down-feed counts as 0 (conservative)' }, { value: 'signed', label: 'Signed (gravity helps down-feed)' }]} />}
             </div>
+            {d.system === 'transfer' && (
+              <div className="mt-4 rounded-xl border border-line p-3">
+                <NumField label="Upper (roof) tank volume for the filling flow" unit="m³" value={d.tankVolume} onChange={(v) => set({ tankVolume: v, review: null })} min={0} />
+                <TankList tanks={(d.tanks || []).filter((t) => t.kind === 'tank')} onUse={(t) => set({ tankVolume: t.volume, review: null })} label="Use this volume" />
+              </div>
+            )}
+            {d.system === 'sump' && (
+              <div className="mt-4 rounded-xl border border-line p-3">
+                <div className="grid grid-cols-3 gap-2">
+                  {['L', 'W', 'D'].map((k) => (
+                    <NumField key={k} label={{ L: 'Pit length', W: 'Pit width', D: 'Effective depth' }[k]} unit="m" value={d.pit?.[k] ?? ''} onChange={(v) => set((x) => ({ pit: { ...(x.pit || {}), [k]: v }, review: null }))} step={0.1} />
+                  ))}
+                </div>
+                <TankList tanks={(d.tanks || []).filter((t) => t.kind === 'pit' || t.dims)} onUse={(t) => t.dims && set({ pit: { L: t.dims[0], W: t.dims[1], D: t.dims[2] }, review: null })} label="Use this size" />
+              </div>
+            )}
             <div className="mt-4 rounded-xl bg-brand-500/10 p-3 text-sm text-slate-200">
               <b>{d.levels.length}</b> levels{d.levels.length ? ` (${d.levels[0].name} → ${d.levels.at(-1).name})` : ''}.{' '}
               {sys.fixtures
@@ -531,11 +565,11 @@ export function DrawingTab() {
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-3">
-                <SelectField label="Drawing with the pipe route" value={d.routePlan || d.plans[0]?.id || ''} onChange={(v) => set({ routePlan: v, review: null })} options={d.plans.map((p) => ({ value: p.id, label: p.name }))} />
-                <button className="btn-secondary" onClick={() => { const id = d.routePlan || d.plans[0]?.id; if (id && CACHE.has(id)) setView(id); else notify('Upload the drawing again to open its route.', 'bad'); }} disabled={!d.plans.length}>
+                <SelectField label="Horizontal route drawing (optional)" value={d.routePlan || ''} onChange={(v) => set({ routePlan: v, review: null })} options={[{ value: '', label: '— none: riser length only —' }, ...d.plans.map((p) => ({ value: p.id, label: p.name }))]} />
+                <button className="btn-secondary" onClick={() => { const id = d.routePlan; if (id && CACHE.has(id)) setView(id); else notify(id ? 'Upload the drawing again to open its route.' : 'Choose a drawing first.', 'bad'); }} disabled={!d.routePlan}>
                   <Eye size={15} /> Open route – pick start & end of the main
                 </button>
-                <p className="text-[11px] text-slate-500">Automatic picking follows the largest pipe; for a transfer / discharge main pick its start (pump, tank) and end yourself.</p>
+                <p className="text-[11px] text-slate-500">The riser length (level difference + horizontal runs from step 2) is always counted. Add a plan only for a long horizontal run – e.g. pump room to riser shaft on the basement plan; the largest labelled main is picked automatically and can be corrected in the route view.</p>
               </div>
               <div className="rounded-xl bg-ink-950/40 p-3 text-sm">
                 {res.floors[0] ? (
@@ -1138,4 +1172,28 @@ function SymbolThumb({ flat, block }) {
     g.stroke();
   }, [flat, block]);
   return <canvas ref={ref} className="h-14 w-14 shrink-0 rounded border border-line" />;
+}
+
+function TankList({ tanks, onUse, label }) {
+  if (!tanks.length) return <p className="mt-2 text-[11px] text-slate-500">No tank / pit notes found on the drawings – type the value.</p>;
+  return (
+    <div className="mt-2 space-y-1">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Found on the drawings</div>
+      {tanks.map((t) => (
+        <div key={t.text} className="flex items-start gap-2 rounded-lg bg-ink-950/40 p-2 text-[11px]">
+          <span className="flex-1 text-slate-300">
+            <b className="text-slate-100">{t.volume ? `${t.volume} m³` : '–'}</b>
+            {t.dims ? ` · ${t.dims.join(' × ')} m` : ''}
+            {t.where ? ` · ${t.where}` : ''}
+            <span className="block truncate text-slate-500" title={t.text}>
+              {t.text}
+            </span>
+          </span>
+          <button className="btn-ghost !py-0.5 text-[11px] text-brand-400" onClick={() => onUse(t)}>
+            {label}
+          </button>
+        </div>
+      ))}
+    </div>
+  );
 }

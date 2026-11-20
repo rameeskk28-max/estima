@@ -80,7 +80,7 @@ export function SheetHtml({ sheet, project }) {
                 <thead>
                   <tr>
                     {t.columns.map((c, k) => (
-                      <th key={k} style={{ width: `${c.w * 100}%`, textAlign: c.align === 'c' ? 'center' : 'left' }}>
+                      <th key={k} style={{ width: `${c.w * 100}%`, textAlign: c.align === 'c' ? 'center' : c.align === 'r' ? 'right' : 'left' }}>
                         {c.label}
                       </th>
                     ))}
@@ -95,7 +95,7 @@ export function SheetHtml({ sheet, project }) {
                         key={k}
                         style={{
                           width: t.noHead ? `${t.columns[k].w * 100}%` : undefined,
-                          textAlign: t.columns[k].align === 'c' ? 'center' : 'left',
+                          textAlign: t.columns[k].align === 'c' ? 'center' : t.columns[k].align === 'r' ? 'right' : 'left',
                           fontWeight: r.bold || (r.keyCol && k === 0) || r.valCol === k || r.tone?.col === k ? 700 : 400,
                           whiteSpace: 'pre-line',
                           fontStyle: r.refCol === k ? 'italic' : 'normal',

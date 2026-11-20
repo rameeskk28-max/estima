@@ -6,6 +6,7 @@ import { SubmittalBuilder } from './modules/submittal/SubmittalBuilder.jsx';
 import { PumpScheduleTab } from './modules/schedule/PumpScheduleTab.jsx';
 import { LiteratureTab } from './modules/literature/LiteratureTab.jsx';
 import { RepliesTab } from './modules/replies/RepliesTab.jsx';
+import { OrdersTab } from './modules/orders/OrdersTab.jsx';
 import { Home, FOLDERS, CALC_ITEMS, useReveal } from './modules/home/Home.jsx';
 import { TOOL_ITEMS, ToolPage, ToolsFolder } from './modules/tools/ToolsTab.jsx';
 import { QUOTE_ITEMS, QuoteGenerator, DocumentLibrary } from './modules/quote/QuoteTab.jsx';
@@ -21,7 +22,10 @@ const SUB = {
 import { Toast } from './components/ui.jsx';
 import { BRAND } from './brand.js';
 
-const CALC_PAGES = { booster: BoosterCalc, transfer: TransferCalc, sump: SumpCalc, vessel: VesselCalc, chw: ChwCalc, drawing: DrawingTab };
+const DrawingTransfer = () => <DrawingTab preset="transfer" />;
+const DrawingSump = () => <DrawingTab preset="sump" />;
+const DrawingBooster = () => <DrawingTab preset="booster" />;
+const CALC_PAGES = { booster: BoosterCalc, transfer: TransferCalc, sump: SumpCalc, vessel: VesselCalc, chw: ChwCalc, drawing: DrawingBooster, 'drawing-transfer': DrawingTransfer, 'drawing-sump': DrawingSump };
 const LEGACY = { booster: 'calc/booster', transfer: 'calc/transfer', sump: 'calc/sump', vessel: 'calc/vessel', chw: 'calc/chw' };
 
 function parseRoute() {
@@ -31,7 +35,7 @@ function parseRoute() {
   if (folder === 'calc') return { folder: 'calc', item: CALC_PAGES[item] ? item : null };
   if (folder === 'tools') return { folder: 'tools', item: TOOL_ITEMS.some((t) => t.key === item) ? item : null };
   if (folder === 'quote') return { folder: 'quote', item: ['library', 'compliance'].includes(item) ? item : 'generate' };
-  if (['schedule', 'literature', 'submittal', 'replies'].includes(folder)) return { folder, item: null };
+  if (['schedule', 'literature', 'submittal', 'replies', 'orders'].includes(folder)) return { folder, item: null };
   return { folder: 'home', item: null };
 }
 
@@ -149,7 +153,7 @@ function FolderPage({ route, go }) {
       ? CALC_PAGES[route.item]
       : route.folder === 'tools' || route.folder === 'quote'
         ? null
-        : { schedule: PumpScheduleTab, literature: LiteratureTab, submittal: SubmittalBuilder, replies: RepliesTab }[route.folder];
+        : { schedule: PumpScheduleTab, literature: LiteratureTab, submittal: SubmittalBuilder, replies: RepliesTab, orders: OrdersTab }[route.folder];
   return (
     <div className="pt-6">
       <div className="no-print mb-6 flex flex-wrap items-center justify-between gap-4">

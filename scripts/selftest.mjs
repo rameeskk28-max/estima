@@ -265,5 +265,28 @@ import { findViews, DEFAULT_SYMBOLS, classifyBlock } from '../src/lib/drawing/ne
   assert(net2.edges.some((e) => e.od === 40 && e.odFromLabel), 'nominal-bore labels: Ø32 (DN) → Ø40 PPR');
 }
 
+// Transfer / sump: tank and pit notes on drawings
+import { findTanks } from '../src/lib/drawing/network.js';
+{
+  const tanks = findTanks({ texts: [{ text: 'GRP DOMESTIC WATER TANK CAPACITY = 30m³ SIZE =7.0x3.0x2.0m H' }, { text: 'R.C.C U.G.WATER TANK # 01&02 (270m)' }, { text: 'SUMP PIT 1.5 x 1.5 x 1.2 m' }, { text: '560 LTR STORAGE TANK WITH BACK UP ELECTRICAL ELEMENT' }] });
+  const up = tanks.find((x) => x.where === 'upper');
+  const pit = tanks.find((x) => x.kind === 'pit');
+  assert(tanks.length === 3 && up.volume === 30 && tanks.find((x) => x.where === 'lower').volume === 270 && pit.dims.join('x') === '1.5x1.5x1.2', `tank / pit notes read (${tanks.map((x) => `${x.kind}:${x.volume}`).join(', ')}) – water heaters ignored`);
+}
+
+// Order processing: costing, margin & compiled order file
+import { newOrder, costTotals, costRow, orderEntries } from '../src/lib/orders.js';
+{
+  const o = newOrder({ projectName: 'Synthetic Tower' });
+  o.orderNo = 'SO-1';
+  o.costing = [{ id: 'a', name: 'BPS', qty: 1, pump: 12000, panel: 6500, assembly: 2500, vfd: 4200, vessel: 1800, fittings: '', quoted: 36000 }, { id: 'b', name: 'TPS', qty: 2, pump: 8000, panel: 3000, assembly: 1000, quoted: 20000 }];
+  const t = costTotals(o.costing);
+  assert(costRow(o.costing[0]).net === 27000 && t.net === 51000 && t.margin === 5000 && Math.abs(t.markup - 9.8039) < 0.01, `costing: net ${t.net}, margin ${t.margin}, markup ${t.markup.toFixed(1)} % on cost`);
+  const files = { [`ord-${o.id}-quote`]: [{ name: 'q.pdf', bytes: await sample('Quote', [595.28, 841.89], 0, 2), pages: 2 }] };
+  const res = await compileSubmittal({ project: { projectName: 'Synthetic Tower', refNo: 'SO-1' }, entries: orderEntries(o), files, logo, cover: { title: 'ORDER PROCESSING FILE', internal: true } });
+  writeFileSync(`${out}/order-file.pdf`, res.bytes);
+  assert(res.pageCount >= 12, `order file compiled with cover, index, 6 sections (${res.pageCount} pages)`);
+}
+
 if (failures) { console.error(`${failures} failure(s)`); process.exit(1); }
 console.log('All self-tests passed.');

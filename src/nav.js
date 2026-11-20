@@ -1,11 +1,15 @@
 // One map of every page, grouped in workflow order: Design → Submittal → Replies.
 // Used by the top menu, the mobile menu, the search (Ctrl+K) and the home page.
-import { TableProperties, BookOpen, Package, MessageSquareReply, FileInput, ClipboardCheck, Library, Calculator, FolderOpen } from 'lucide-react';
+import { ArrowUpDown, Waves, TableProperties, BookOpen, Package, MessageSquareReply, FileInput, ClipboardCheck, Library, Calculator, FolderOpen, ClipboardList } from 'lucide-react';
 import { CALC_ITEMS } from './modules/home/items.js';
 import { TOOL_ITEMS } from './modules/tools/ToolsTab.jsx';
 
 const calc = CALC_ITEMS.filter((c) => c.key !== 'drawing').map((c) => ({ ...c, route: `calc/${c.key}`, keys: 'calculation pump head flow sheet' }));
-const drawing = CALC_ITEMS.filter((c) => c.key === 'drawing').map((c) => ({ ...c, label: 'Calculation from Drawing', route: 'calc/drawing', keys: 'dwg pdf plan riser route fixtures autocad revit' }));
+const drawing = CALC_ITEMS.filter((c) => c.key === 'drawing').flatMap((c) => [
+  { ...c, key: 'drawing', label: 'Booster from Drawings', desc: 'Riser + floor plans → fixtures per floor, critical floor & head', route: 'calc/drawing', keys: 'dwg pdf plan riser route fixtures autocad revit booster' },
+  { ...c, key: 'drawing-transfer', label: 'Transfer from Drawings', icon: ArrowUpDown, desc: 'Tank volumes & transfer main from the drawings → flow & head', route: 'calc/drawing-transfer', keys: 'dwg pdf transfer tank roof filling' },
+  { ...c, key: 'drawing-sump', label: 'Sump from Drawings', icon: Waves, desc: 'Pit size & discharge main from the drawings → flow & head', route: 'calc/drawing-sump', keys: 'dwg pdf sump pit drainage sewage discharge' },
+]);
 const tools = TOOL_ITEMS.map((t) => ({ ...t, route: `tools/${t.key}`, keys: 'tool quick calculator' }));
 
 export const NAV = [
@@ -40,6 +44,15 @@ export const NAV = [
       },
       { title: 'Compile', items: [{ key: 'submittal', label: 'Submittal Package', icon: Package, desc: 'Project header, index, uploads → one A4 PDF', route: 'submittal', keys: 'compile index cover toc compress' }] },
     ],
+  },
+  {
+    key: 'orders',
+    label: 'Orders',
+    icon: ClipboardList,
+    desc: 'Order processing file – quote, LPO, costing, item codes, datasheets',
+    folders: ['orders'],
+    route: 'orders',
+    sections: [{ title: 'Order processing', items: [{ key: 'orders', label: 'Order Processing', icon: ClipboardList, desc: 'Final quote, LPO, costing & margin, item codes, datasheets → one PDF', route: 'orders', keys: 'order lpo costing margin cost item code purchase' }] }],
   },
   {
     key: 'replies',

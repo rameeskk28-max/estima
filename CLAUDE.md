@@ -50,6 +50,7 @@ One page map in `src/nav.js` (`NAV` groups in workflow order: Design → Submitt
 | Technical compliance statement (spec → clause rows, GL TCS layout) | `src/lib/compliance/{spec,readSpec,compliancePdf}.js`, `src/modules/quote/ComplianceTab.jsx` |
 | Consultant comment replies (4 columns + annexures, stamp) | `src/lib/replies.js`, `src/lib/pdf/replyPdf.js`, `src/modules/replies/RepliesTab.jsx` |
 | Calculation from drawing (DWG → network → critical route → calculator) | `src/lib/drawing/{flatten,network,ppr,building,draw,readDwg,readPdf}.js`, `src/modules/drawing/DrawingTab.jsx` (route `#/calc/drawing`) |
+| Order processing (details, quote, LPO, costing & markup, item codes, datasheets → compiled PDF) | `src/lib/orders.js`, `src/modules/orders/OrdersTab.jsx` (route `#/orders`, files `ord-<id>-<section>`; compiled via `compileSubmittal` with `entry.sheets` + `cover: { title, internal }`) |
 | Engineering tools (metric + imperial, A4 sheets) | `src/lib/tools.js`, `src/lib/units.js`, `src/modules/tools/ToolsTab.jsx` |
 | Branding / credit | `src/brand.js` (logo, company details, "Designed & developed by Ramees" → LinkedIn) |
 
@@ -103,4 +104,5 @@ of unlabelled pipes → UX re-organisation: grouped mega-menus, Ctrl+K search, h
 All tools / Current project), calculators with inputs left + sticky results right from 1280 px → Calculation from Drawings as a 4-step
 workflow (Drawings: multi-file upload + auto type riser/plans/ignore · Building: levels, pump level, served range
 / destination · Floors: per-floor drawing dropdown + typed fixtures (`drawing.floorFix`), building totals, critical
-floor · Review: editable calculator inputs in `drawing.review`, Save to Submittal via `saveDuty(key, result, inputs)`).
+floor · Review: editable calculator inputs in `drawing.review`, Save to Submittal via `saveDuty(key, result, inputs)`) → transfer/sump from drawings (own routes `calc/drawing-transfer|sump`,
+tank/pit notes via `findTanks`, main via `mainRoute`, plan route optional) → Order Processing folder.

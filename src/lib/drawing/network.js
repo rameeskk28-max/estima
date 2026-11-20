@@ -874,3 +874,110 @@ function areaViews(net, comps) {
   areas.forEach((v, i) => (v.title = `PLAN AREA ${i + 1}`));
   return areas;
 }
+
+/* ---------------- transfer / sump: tanks, pits and the main ---------------- */
+const num = (s) => Number(String(s).replace(',', '.'));
+/**
+ * Tank / pit notes on a drawing: "GRP WATER TANK … CAPACITY = 30m³ SIZE = 7.0x3.0x2.0m H",
+ * "4.55m³ - TOTAL CAPACITY (DIA1.75mXL2.6mXD2.25m)", "SUMP PIT 1.5 x 1.5 x 1.2 m".
+ */
+export function findTanks(flat, source = '') {
+  const out = [];
+  for (const t of flat.texts) {
+    const s = t.text.replace(/\s+/g, ' ');
+    if (!/TANK|SUMP|PIT|CHAMBER|CISTERN/i.test(s)) continue;
+    const vol = s.match(/(\d+(?:[.,]\d+)?)\s*(?:m3|m³|m\^3|cu\.?\s*m|CUM)(?![a-z])/i) || s.match(/CAPACITY\s*[=:-]?\s*(\d+(?:[.,]\d+)?)\s*m(?![a-z])/i) || s.match(/\((\d+(?:[.,]\d+)?)\s*m\)/i);
+    const dims = s.match(/(\d+(?:[.,]\d+)?)\s*M?\s*[xX×]\s*(?:L\s*)?(\d+(?:[.,]\d+)?)\s*M?\s*[xX×]\s*(?:D\s*|H\s*)?(\d+(?:[.,]\d+)?)\s*(?:M|m)?/);
+    const dia = s.match(/DIA\.?\s*(\d+(?:[.,]\d+)?)\s*m?\s*[xX×]\s*L?\s*(\d+(?:[.,]\d+)?)/i);
+    const litres = s.match(/(\d{3,5})\s*(?:LTR|LITRES?|L)\b/i);
+    if (!vol && !dims && !dia) continue;
+    if (litres && !vol && !dims) continue; // water heaters, vessels
+    const kind = /SUMP|PIT|CHAMBER|DRAIN|SEWAGE/i.test(s) ? 'pit' : 'tank';
+    const where = /ROOF|OVERHEAD|O\.?H\.?T|GRP|ELEVATED|UPPER/i.test(s) ? 'upper' : /U\.?G|UNDERGROUND|UNDER GROUND|LOWER|R\.?C\.?C|BASEMENT|SUCTION/i.test(s) ? 'lower' : '';
+    const d = dims ? [num(dims[1]), num(dims[2]), num(dims[3])] : null;
+    const volume = vol ? num(vol[1]) : d ? d[0] * d[1] * d[2] : dia ? (Math.PI / 4) * num(dia[1]) ** 2 * num(dia[2]) : null;
+    out.push({ text: s.slice(0, 160), kind, where, volume: volume ? Math.round(volume * 100) / 100 : null, dims: d, source });
+  }
+  // same note repeated (twice in a sheet) → once
+  const seen = new Set();
+  return out.filter((x) => (seen.has(x.text) ? false : (seen.add(x.text), true)));
+}
+
+/**
+ * The main of a transfer / discharge system: the longest run that stays on large pipe, preferring the
+ * network labelled "ROOF TANK / FILLING / TRANSFER / DISCHARGE / RISING MAIN".
+ * @returns {{ src: number, target: number } | null}
+ */
+export function mainRoute(net, flat, kind = 'transfer', allowed = null) {
+  if (!net.edges.length) return null;
+  const k = flat.unitToMm || 1;
+  const re = kind === 'sump' ? /DISCHARGE|RISING MAIN|SUMP|PUMPED|DRAIN|SEWAGE/i : /ROOF TANK|FILLING|TRANSFER|DELIVERY|OVERHEAD|O\.H\.T|RISER/i;
+  const labels = flat.texts.filter((t) => re.test(t.text)).map((t) => ({ x: t.x * k, y: t.y * k }));
+  // components
+  const comp = new Array(net.nodes.length).fill(-1);
+  const comps = [];
+  for (const n of net.nodes) {
+    if (comp[n.id] >= 0 || !n.edges.length || (allowed && !allowed.has(n.id))) continue;
+    const ids = [];
+    const st = [n.id];
+    comp[n.id] = comps.length;
+    while (st.length) {
+      const u = st.pop();
+      ids.push(u);
+      for (const eid of net.nodes[u].edges) {
+        const e = net.edges[eid];
+        const v = e.u === u ? e.v : e.u;
+        if (comp[v] < 0) (comp[v] = comps.length), st.push(v);
+      }
+    }
+    comps.push(ids);
+  }
+  const segDist = (p, e) => {
+    const dx = e.b.x - e.a.x, dy = e.b.y - e.a.y, L2 = dx * dx + dy * dy || 1;
+    const t = Math.max(0, Math.min(1, ((p.x - e.a.x) * dx + (p.y - e.a.y) * dy) / L2));
+    return Math.hypot(e.a.x + t * dx - p.x, e.a.y + t * dy - p.y);
+  };
+  // score components: labelled near its pipes, then pipe size, then length
+  let best = null;
+  let bestScore = -Infinity;
+  comps.forEach((ids, ci) => {
+    const eids = [...new Set(ids.flatMap((id) => net.nodes[id].edges))];
+    // the main size: largest pipe with at least 3 m of run (stray labelled bits don't count)
+    const byOd = {};
+    for (const id of eids) byOd[net.edges[id].od || 0] = (byOd[net.edges[id].od || 0] || 0) + net.edges[id].L;
+    const sizes = Object.entries(byOd).filter(([, L]) => L >= 3000).map(([od]) => Number(od));
+    const maxOd = sizes.length ? Math.max(...sizes) : Math.max(...eids.map((id) => net.edges[id].od || 0));
+    const len = eids.reduce((s, id) => s + net.edges[id].L, 0);
+    const labelled = labels.some((l) => eids.some((id) => segDist(l, net.edges[id]) < 1500));
+    const score = (labelled ? 1e9 : 0) + maxOd * 1e5 + len;
+    if (score > bestScore) (bestScore = score), (best = { ci, eids, maxOd });
+  });
+  if (!best) return null;
+  // sub-network on main-size pipe; its two farthest ends
+  const big = new Set(best.eids.filter((id) => (net.edges[id].od || 0) >= 0.7 * best.maxOd));
+  const adj = new Map();
+  for (const id of big) {
+    const e = net.edges[id];
+    (adj.get(e.u) || adj.set(e.u, []).get(e.u)).push([e.v, e.L]);
+    (adj.get(e.v) || adj.set(e.v, []).get(e.v)).push([e.u, e.L]);
+  }
+  const far = (start) => {
+    const dist = new Map([[start, 0]]);
+    const st = [start];
+    while (st.length) {
+      const u = st.pop();
+      for (const [v, L] of adj.get(u) || []) if (!dist.has(v)) dist.set(v, dist.get(u) + L), st.push(v);
+    }
+    let bn = start;
+    for (const [n, dd] of dist) if (dd > dist.get(bn)) bn = n;
+    return bn;
+  };
+  const any = adj.keys().next().value;
+  if (any == null) return null;
+  const a = far(any);
+  const b = far(a);
+  // supply end = the end with the larger pipe / lower on the sheet is unknown – take the end nearest a pump or tank
+  const equip = net.equipment || [];
+  const nearEq = (id) => Math.min(...equip.map((q) => Math.hypot(q.x - net.nodes[id].x, q.y - net.nodes[id].y)), Infinity);
+  return nearEq(b) < nearEq(a) ? { src: b, target: a } : { src: a, target: b };
+}

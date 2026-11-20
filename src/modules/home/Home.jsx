@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, Calculator, TableProperties, BookOpen, Package, MessageSquareReply, Wrench, FileInput, Check, FileCheck2, Gauge, Route, Search } from 'lucide-react';
+import { ArrowRight, Calculator, TableProperties, BookOpen, Package, MessageSquareReply, Wrench, FileInput, Check, FileCheck2, Gauge, Route, Search, ClipboardList } from 'lucide-react';
 import { NAV } from '../../nav.js';
 import { useStore } from '../../store.jsx';
 import { CALCULATORS } from '../../lib/calcs/index.js';
@@ -73,6 +73,16 @@ export const FOLDERS = [
     tone: 'brand',
     desc: 'Reply to consultant comments per submittal revision – status, annexure references, annexure PDFs and the previous submittal in one A4 PDF.',
     items: [{ label: 'Comments, replies & status', route: 'replies' }, { label: 'Annexures & previous submittal', route: 'replies' }, { label: 'Combined A4 reply PDF', route: 'replies' }],
+  },
+  {
+    key: 'orders',
+    route: 'orders',
+    label: 'Order Processing',
+    nav: 'Orders',
+    icon: ClipboardList,
+    tone: 'brand',
+    desc: 'Order file per job – final quote, LPO, costing & margin, item codes and pump datasheets compiled into one PDF.',
+    items: [{ label: 'Costing & margin', route: 'orders' }, { label: 'Item codes & datasheets', route: 'orders' }, { label: 'Compiled order PDF', route: 'orders' }],
   },
   {
     key: 'tools',
@@ -188,7 +198,7 @@ function Counter({ to, suffix, tone = 'text-brand-400' }) {
 }
 
 export function Home({ go }) {
-  const { duties, schedule, literature, entries, replies, library, project, compliance, drawing } = useStore();
+  const { duties, schedule, literature, entries, replies, library, project, compliance, drawing, orders } = useStore();
   const openSearch = () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }));
   const clauses = compliance.rows.filter((r) => r.type === 'clause').length;
   const progress = [
@@ -198,6 +208,7 @@ export function Home({ go }) {
     { label: 'Compliance clauses', n: clauses, route: 'quote/compliance', icon: FileCheck2 },
     { label: 'Submittal sections', n: entries.filter((e) => e.include !== false).length, route: 'submittal', icon: Package },
     { label: 'Comment replies', n: replies.length, route: 'replies', icon: MessageSquareReply },
+    { label: 'Orders', n: orders.length, route: 'orders', icon: ClipboardList },
   ];
   const start = [
     {
@@ -274,7 +285,7 @@ export function Home({ go }) {
         {/* every tool */}
         <section>
           <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">All tools</h2>
-          <div className="grid items-start gap-4 md:grid-cols-3">
+          <div className="grid items-start gap-4 md:grid-cols-2 2xl:grid-cols-4">
             {NAV.map((g) => (
               <div key={g.key} className="card rounded-3xl p-4">
                 <div className="mb-2 flex items-center gap-2 px-1">

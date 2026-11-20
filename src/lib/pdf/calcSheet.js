@@ -79,8 +79,8 @@ export async function renderCalcSheet(doc, fonts, sheet, project = {}, logoImg =
       let x = L;
       lines.forEach((ls, k) => {
         ls.forEach((ln, li) => {
-          const cx = t.columns[k].align === 'c' ? x + widths[k] / 2 : x + pad;
-          drawText(page, ln, { x: cx, y: y - pad - size + 1 - li * lh, size: size - 0.2, font: fonts.bold, color: C.navy, align: t.columns[k].align === 'c' ? 'center' : 'left' });
+          const cx = t.columns[k].align === 'c' ? x + widths[k] / 2 : t.columns[k].align === 'r' ? x + widths[k] - pad : x + pad;
+          drawText(page, ln, { x: cx, y: y - pad - size + 1 - li * lh, size: size - 0.2, font: fonts.bold, color: C.navy, align: t.columns[k].align === 'c' ? 'center' : t.columns[k].align === 'r' ? 'right' : 'left' });
         });
         vline(page, x, y, y - h, C.border, 0.5);
         x += widths[k];
@@ -107,13 +107,14 @@ export async function renderCalcSheet(doc, fonts, sheet, project = {}, logoImg =
         if (toned(k)) rect(page, x + 0.5, y - h + 0.5, widths[k] - 1, h - 1, { fill: TONES[r.tone.color].bg });
         lines.forEach((ln, li) => {
           const center = t.columns[k].align === 'c';
+          const right = t.columns[k].align === 'r';
           drawText(page, ln, {
-            x: center ? x + widths[k] / 2 : x + pad,
+            x: center ? x + widths[k] / 2 : right ? x + widths[k] - pad : x + pad,
             y: y - pad - size + 1 - li * lh,
             size,
             font: fontFor(k),
             color: toned(k) ? TONES[r.tone.color].fg : flagged ? C.red : r.refCol === k ? C.muted : r.valCol === k || r.bold ? C.navy : C.text,
-            align: center ? 'center' : 'left',
+            align: center ? 'center' : right ? 'right' : 'left',
           });
         });
         vline(page, x, y, y - h, C.border, 0.5);

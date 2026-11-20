@@ -39,6 +39,8 @@ export function buildPlan(entries, duties, files, literature = [], opts = {}) {
       );
       lits.forEach((l) => literatureFiles(l, files, 'drawing').forEach((f) => items.push({ type: 'pdf', file: f, label: `Drawing – ${strip(f.name)}` })));
     }
+    // ready-made calculation-sheet tables (order processing: project details, costing, item codes)
+    (e.sheets || []).forEach((sh) => items.push({ type: 'calc', duty: { sheet: sh }, label: sh.docTitle || e.title }));
     if (e.libSlot) (files[e.libSlot] || []).forEach((f) => items.push({ type: 'pdf', file: f, label: strip(f.name) }));
     (files[e.id] || []).forEach((f) => items.push({ type: 'pdf', file: f, label: strip(f.name) }));
     return { entry: e, number: idx + 1, items };
@@ -50,7 +52,7 @@ export function buildPlan(entries, duties, files, literature = [], opts = {}) {
  * @param {{project: object, entries: object[], duties: object[], files: Record<string, {name:string, bytes:ArrayBuffer|Uint8Array}[]>, logo?: {bytes:ArrayBuffer, type:string}}} input
  * @param {(msg: string) => void} [onProgress]
  */
-export async function compileSubmittal({ project = {}, entries = [], duties = [], files = {}, logo, schedule, literature = [], warranty, librarySettings, compliance, stamp }, onProgress = () => {}) {
+export async function compileSubmittal({ project = {}, entries = [], duties = [], files = {}, logo, schedule, literature = [], warranty, librarySettings, compliance, stamp, cover }, onProgress = () => {}) {
   const doc = await PDFDocument.create();
   const fonts = await loadFonts(doc);
   const warnings = [];
@@ -74,8 +76,8 @@ export async function compileSubmittal({ project = {}, entries = [], duties = []
   const track = (pages, section, footer = true) => pages.forEach((p) => pageMeta.push({ page: p, section, footer }));
 
   onProgress('Generating cover page…');
-  const cover = drawCover(doc, fonts, project, logoImg);
-  track([cover], '', false);
+  const coverPage = drawCover(doc, fonts, project, logoImg, cover);
+  track([coverPage], '', false);
 
   // Reserve TOC pages
   const tocRows = [];
@@ -151,7 +153,7 @@ export async function compileSubmittal({ project = {}, entries = [], duties = []
 /* Cover                                                               */
 /* ------------------------------------------------------------------ */
 
-function drawCover(doc, fonts, p, logoImg) {
+function drawCover(doc, fonts, p, logoImg, cover = {}) {
   const page = doc.addPage(A4);
   const [W, H] = A4;
   const L = 44;
@@ -170,7 +172,7 @@ function drawCover(doc, fonts, p, logoImg) {
   rect(page, 0, H - band - 156, W, 6, { fill: C.sky });
   rect(page, 0, 0, 14, H - band - 156, { fill: C.navy2 });
 
-  drawText(page, 'TECHNICAL SUBMITTAL', { x: L, y: H - band - 62, size: 30, font: fonts.bold, color: C.white });
+  drawText(page, cover.title || 'TECHNICAL SUBMITTAL', { x: L, y: H - band - 62, size: 30, font: fonts.bold, color: C.white });
   rect(page, L, H - band - 76, 60, 3, { fill: C.sky });
   const subj = wrap(fonts.reg, p.subject || 'Material Submittal – Water Pumps & Pressure Vessels', 13, R - L);
   subj.slice(0, 2).forEach((ln, i) => drawText(page, ln, { x: L, y: H - band - 100 - i * 16, size: 13, font: fonts.reg, color: C.white }));
@@ -186,7 +188,7 @@ function drawCover(doc, fonts, p, logoImg) {
   });
   y -= 10;
 
-  const rows = [
+  const rows = cover.rows || [
     ['Client', p.client],
     ['Consultant', p.consultant],
     ['MEP Contractor', p.contractor],
@@ -206,6 +208,10 @@ function drawCover(doc, fonts, p, logoImg) {
     y -= h;
   });
 
+  if (cover.internal) {
+    drawText(page, cover.footer || 'Internal document – order processing file. Not for issue to the client.', { x: W / 2, y: 36, size: 7, font: fonts.ital, color: C.muted, align: 'center' });
+    return page;
+  }
   // Consultant stamp & action codes
   const boxTop = 250;
   const bw = (R - L - 14) / 2;

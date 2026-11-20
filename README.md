@@ -161,3 +161,12 @@ Upload the riser diagram and floor plans as AutoCAD/Revit **.dwg** files. Everyt
 - Sheets with several plans are split into floor views by their titles (BASEMENT / GROUND / FIRST FLOOR,
   TOP ROOF…); untitled sheets into "plan areas". Pipes without a size label get the smallest PPR size
   within 1.5 m/s for their section flow.
+
+## Order Processing (Orders)
+
+One file per order: **1** project details (reference) · **2** final quotation PDF · **3** LPO PDF · **4** costing
+per pump set (pump, control panel, assembly, VFD kW + cost, pressure vessel size + cost, fittings optional;
+net cost = sum × qty, quoted value, net margin, **markup on cost**) · **5** item codes (code, model, qty, rated
+current) · **6** pump datasheets (upload, or copy from the Document Library). "Compile order file" builds one
+indexed A4 PDF (internal cover, index, section dividers, page numbers), compressed. "New order from last
+quotation" pre-fills details, costing rows and models from Quote → Submittal.

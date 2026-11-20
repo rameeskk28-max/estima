@@ -33,6 +33,9 @@ export const defaultDrawing = () => ({
   servedTo: '', // booster: highest floor served / transfer, sump: destination level
   routePlan: '', // transfer / sump / chw: plan view holding the route
   floorFix: {}, // { levelName: { fixtureName: count } } – typed per floor, replaces the drawing count
+  tanks: [], // tank / pit notes found on the drawings
+  tankVolume: '', // transfer: upper (roof) tank volume m³
+  pit: null, // sump: { L, W, D } m
   step: 1,
   review: null, // calculator inputs prepared for review (editable)
 });
@@ -87,7 +90,7 @@ export function buildingResult(d, { duty = 1, designFlowLps = null } = {}) {
     served = [dest];
   }
   const rows = served.map((l) => {
-    const plan = l.plan || (sys.fixtures ? planFor(l.name) : d.plans.find((p) => p.id === d.routePlan) || d.plans[0] || null);
+    const plan = l.plan || (sys.fixtures ? planFor(l.name) : d.plans.find((p) => p.id === d.routePlan) || null);
     const fx = sys.fixtures ? floorFixtures(d, l.name, plan) : {};
     return { level: l.name, elev: l.elev || 0, plan, fixtures: fx, wsfu: wsfuOf(fx) };
   });
@@ -145,6 +148,8 @@ export function calcPatch(d, res) {
       : '',
   };
   if (sys.calc !== 'chw') patch.staticHeight = Number(((c?.stat || 0) + (sys.fixtures ? 0 : Number(d.extraRise) || 0)).toFixed(2));
+  if (d.system === 'transfer' && Number(d.tankVolume) > 0) patch.tankVolume = Number(d.tankVolume);
+  if (d.system === 'sump' && d.pit) Object.assign(patch, { pitL: Number(d.pit.L) || undefined, pitW: Number(d.pit.W) || undefined, pitD: Number(d.pit.D) || undefined });
   if (sys.fixtures) {
     patch.supplyType = d.supplyType;
     patch.demandMode = 'auto';

@@ -11,6 +11,7 @@ import { DEFAULT_LIBRARY } from './lib/quote/generate.js';
 import { makeBackup, isLibrarySlot } from './lib/backup.js';
 import * as cloud from './lib/cloud.js';
 import { defaultDrawing } from './lib/drawing/building.js';
+import { newOrder, orderSlot, ORDER_SECTIONS } from './lib/orders.js';
 
 const Ctx = createContext(null);
 const KEY = 'pump-submittal-v2';
@@ -87,6 +88,7 @@ export function StoreProvider({ children }) {
   const [quoteDraft, setQuoteDraft] = useState(() => saved?.quoteDraft || null);
   const [compliance, setCompliance] = useState(() => ({ ...DEFAULT_COMPLIANCE(), ...(saved?.compliance || {}) }));
   const [drawing, setDrawing] = useState(() => ({ ...defaultDrawing(), ...(saved?.drawing || {}) }));
+  const [orders, setOrders] = useState(() => saved?.orders || []);
   const [files, setFiles] = useState({}); // entryId -> [{id,name,size,pages,bytes}]
   const [cloudState, setCloudState] = useState({ configured: cloud.cloudConfigured, ready: !cloud.cloudConfigured, user: null, status: 'off', msg: '' });
   const userRef = useRef(null);
@@ -100,11 +102,11 @@ export function StoreProvider({ children }) {
 
   useEffect(() => {
     try {
-      localStorage.setItem(KEY, JSON.stringify({ project, entries, duties, inputs, logo, schedule, uiTheme: theme, literature, replies, stamp, toolInputs, library, warrantyDoc, quoteDraft, compliance, drawing }));
+      localStorage.setItem(KEY, JSON.stringify({ project, entries, duties, inputs, logo, schedule, uiTheme: theme, literature, replies, stamp, toolInputs, library, warrantyDoc, quoteDraft, compliance, drawing, orders }));
     } catch {
       /* quota – ignore */
     }
-  }, [project, entries, duties, inputs, logo, schedule, theme, literature, replies, stamp, toolInputs, library, warrantyDoc, quoteDraft, compliance, drawing]);
+  }, [project, entries, duties, inputs, logo, schedule, theme, literature, replies, stamp, toolInputs, library, warrantyDoc, quoteDraft, compliance, drawing, orders]);
 
   useEffect(() => {
     fileStore.all().then((recs) => {
@@ -266,6 +268,7 @@ export function StoreProvider({ children }) {
     setQuoteDraft(null);
     setCompliance(DEFAULT_COMPLIANCE());
     setDrawing(defaultDrawing());
+    setOrders([]);
   }, []);
 
   // Logo used in PDFs & previews: custom upload, otherwise the supplier brand logo.
@@ -336,6 +339,22 @@ export function StoreProvider({ children }) {
 
   const setTool = useCallback((key, patch) => setToolInputs((s) => ({ ...s, [key]: patch === null ? TOOLS[key].defaults() : { ...s[key], ...patch } })), []);
 
+  /* ---------- Order processing ---------- */
+  const addOrder = useCallback((quote) => {
+    const o = newOrder(project, quote);
+    setOrders((l) => [o, ...l]);
+    return o.id;
+  }, [project]);
+  const updateOrder = useCallback((id, patch) => setOrders((l) => l.map((o) => (o.id === id ? { ...o, ...(typeof patch === 'function' ? patch(o) : patch) } : o))), []);
+  const removeOrder = useCallback(
+    async (id) => {
+      const o = orders.find((x) => x.id === id);
+      if (o) for (const sec of ORDER_SECTIONS) for (const f of files[orderSlot(o, sec.key)] || []) await removeFile(orderSlot(o, sec.key), f.id);
+      setOrders((l) => l.filter((x) => x.id !== id));
+    },
+    [orders, files, removeFile],
+  );
+
   /* ---------- Document library & quote → submittal ---------- */
   const addModel = useCallback((model) => {
     const id = uid();
@@ -366,10 +385,10 @@ export function StoreProvider({ children }) {
     (kind) =>
       makeBackup(
         kind,
-        kind === 'library' ? { library } : { project, entries, duties, inputs, logo, schedule, literature, replies, stamp, toolInputs, library, warrantyDoc, quoteDraft, compliance, drawing },
+        kind === 'library' ? { library } : { project, entries, duties, inputs, logo, schedule, literature, replies, stamp, toolInputs, library, warrantyDoc, quoteDraft, compliance, drawing, orders },
         files,
       ),
-    [library, project, entries, duties, inputs, logo, schedule, literature, replies, stamp, toolInputs, warrantyDoc, quoteDraft, compliance, drawing, files],
+    [library, project, entries, duties, inputs, logo, schedule, literature, replies, stamp, toolInputs, warrantyDoc, quoteDraft, compliance, drawing, orders, files],
   );
   /** Restore a backup (from readBackup). Library imports merge; workspace imports replace. */
   const importBackup = useCallback(async (b) => {
@@ -400,6 +419,7 @@ export function StoreProvider({ children }) {
       if ('quoteDraft' in st) setQuoteDraft(st.quoteDraft);
       if (st.compliance) setCompliance(st.compliance);
       if (st.drawing) setDrawing(st.drawing);
+      if (st.orders) setOrders(st.orders);
     }
   }, []);
 
@@ -407,6 +427,7 @@ export function StoreProvider({ children }) {
     cloud: cloudState, cloudSync, cloudSignIn, cloudSignOut, cloudChangePassword: cloud.changePassword,
     library, setLibrary, addModel, updateModel, removeModel, setLibrarySettings,
     drawing, setDrawing,
+    orders, addOrder, updateOrder, removeOrder,
     compliance, setCompliance, warrantyDoc, setWarrantyDoc, quoteDraft, setQuoteDraft, applyQuote, exportBackup, importBackup,
     toolInputs, setTool,
     replies, addReply, updateReply, removeReply, stamp, setStamp,
