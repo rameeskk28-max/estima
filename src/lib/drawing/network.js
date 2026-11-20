@@ -510,6 +510,8 @@ export function autoSource(net) {
   }
   const load = new Array(nc).fill(0);
   for (const f of net.fixtures) if (f.node != null) load[comp[f.node]] += f.wsfu;
+  // main network: most fixture units; without fixtures, the most pipe
+  if (!load.some((x) => x > 0)) for (const e of net.edges) load[comp[e.u]] += e.L / 1e6;
   const main = load.indexOf(Math.max(...load));
   const fx = net.fixtures.filter((f) => comp[f.node] === main);
   const cx = fx.reduce((s, f) => s + f.x, 0) / Math.max(1, fx.length);
@@ -539,6 +541,15 @@ export function autoSource(net) {
     const score = bad - (net.edges[g.edges[0]].od || 0) * 0.01;
     if (score < bestScore) (bestScore = score), (best = g.id);
   }
+  if (best == null) {
+    // no free pipe end: any end of the main network, else its node on the largest pipe
+    let bo = -1;
+    for (const g of net.nodes) {
+      if (comp[g.id] !== main || !g.edges.length) continue;
+      const od = Math.max(...g.edges.map((id) => net.edges[id].od || 0)) + (g.edges.length === 1 ? 1000 : 0);
+      if (od > bo) (bo = od), (best = g.id);
+    }
+  }
   return best;
 }
 
@@ -556,6 +567,10 @@ const angleAt = (e, nodeId, net) => {
  * @returns paths to every fixture (or every dangling end) with losses; .critical = worst
  */
 export function analyse(net, src, opt = {}) {
+  if (src == null || !net.nodes[src]) {
+    // nothing traceable (no pipes found / no supply) – empty result instead of a crash
+    return { src: null, results: [], critical: null, edgeWsfu: [], totalWsfu: 0, reached: [], unreached: net.fixtures.length, evaluate: () => null, dist: [] };
+  }
   const { dist, prevE } = dijkstra(net, src);
   const C = opt.C || 150;
   const pn = opt.pn || 'PN20';

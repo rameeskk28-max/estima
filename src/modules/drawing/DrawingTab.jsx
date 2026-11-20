@@ -324,6 +324,11 @@ export function DrawingTab() {
                     </p>
                   )}
                   <CountsEditor plan={p} onChange={(manual) => updPlan(p.id, { manual })} />
+                  {!s.lengthM && (
+                    <p className="mt-1 flex items-center gap-1 text-[11px] text-amber-400">
+                      <TriangleAlert size={12} /> No route found on this plan{sys.fixtures && !Object.keys(s.fixtures || {}).length ? ' (no fixtures connected to the pipes)' : ''} – open <b>Route</b> and pick the supply point and the end outlet.
+                    </p>
+                  )}
                   {(s.unreached > 0 || s.maxV > 2.5) && (
                     <p className="mt-1 flex items-center gap-1 text-[11px] text-amber-400">
                       <TriangleAlert size={12} /> {s.unreached > 0 ? `${s.unreached} fixture(s) not connected to the supply – check in Route view. ` : ''}
