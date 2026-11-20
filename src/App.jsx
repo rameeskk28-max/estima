@@ -10,7 +10,6 @@ import { Home, FOLDERS, CALC_ITEMS, useReveal } from './modules/home/Home.jsx';
 import { TOOL_ITEMS, ToolPage, ToolsFolder } from './modules/tools/ToolsTab.jsx';
 import { QUOTE_ITEMS, QuoteGenerator, DocumentLibrary } from './modules/quote/QuoteTab.jsx';
 import { ComplianceTab } from './modules/quote/ComplianceTab.jsx';
-import { LoginPage, AuthSplash } from './modules/auth/LoginPage.jsx';
 
 const SUB = {
   calc: { items: CALC_ITEMS, short: (c) => c.label.replace(' Pump Set', '').replace('Sump / Sewage', 'Sump') },
@@ -353,16 +352,8 @@ function Footer({ go }) {
 export default function App() {
   return (
     <StoreProvider>
-      <Gate />
+      <Shell />
     </StoreProvider>
   );
 }
 
-/** Password protection: the site opens only after signing in (Supabase accounts). */
-function Gate() {
-  const { cloud } = useStore();
-  if (!cloud.configured) return <Shell />;
-  if (!cloud.ready) return <AuthSplash />;
-  if (!cloud.user) return <LoginPage credit={<DeveloperCredit />} />;
-  return <Shell />;
-}

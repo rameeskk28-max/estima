@@ -117,9 +117,3 @@ saved online and shared by every signed-in team member.
 
 Without these variables the site still works and keeps the library in the browser (backup export/import).
 
-## Login (password protection)
-
-The whole site opens only after signing in with a username and password (Supabase accounts – the same
-login as the cloud Document Library). Sign out is in the top bar; change the password under
-Quote to Submittal → Document Library → Change password. New users are added by the administrator in
-Supabase (Authentication → Users → Add user, `<username>@glestima.netlify.app`, auto-confirm).

@@ -4,7 +4,7 @@ Read this first in every new session. It describes what the site is, how it is b
 live and the rules the owner (Ramees, Greenland Equipment & Machinery Est. L.L.C) has set.
 
 ## What it is
-A password-protected web app for Greenland's pump sales/engineering team (Franklin Electric pumps, UAE):
+An open (no site login) web app for Greenland's pump sales/engineering team (Franklin Electric pumps, UAE):
 MEP/HVAC pump calculators, pump schedules, technical literature, consultant comment replies,
 engineering tools, and an automatic **quotation → technical submittal PDF** builder with a
 technical compliance statement and a cloud document library.
@@ -25,13 +25,13 @@ data only). Browser checks: Playwright with the preinstalled Chromium against `n
 ## Routing (hash based, `src/App.jsx`)
 `#/` home folders (`src/modules/home/Home.jsx` → `FOLDERS`) · `#/quote/generate|compliance|library`
 · `#/calc/<booster|transfer|sump|vessel|chw>` · `#/schedule` · `#/literature` · `#/submittal`
-· `#/replies` · `#/tools/<key>`. `Gate` in App.jsx shows `LoginPage` until signed in.
+· `#/replies` · `#/tools/<key>`. The site is open – no login page (owner's choice).
 
 ## Main files
 | Area | Files |
 |---|---|
 | App state (localStorage `pump-submittal-v2`, PDFs in IndexedDB) | `src/store.jsx`, `src/lib/fileStore.js`, `src/lib/backup.js` |
-| Login / cloud library | `src/modules/auth/LoginPage.jsx`, `src/lib/cloud.js`, `supabase/migrations/*.sql` |
+| Cloud library (optional sign-in in Document Library) | `src/lib/cloud.js`, `supabase/migrations/*.sql` |
 | Calculators + Excel-style calc sheets (Reference/Basis column) | `src/lib/calcs/*`, `src/lib/hydraulics.js`, `src/lib/ipc.js`, `src/modules/calculators/*` |
 | Calc-sheet PDF engine (used by sheets, literature, replies, tools, warranty) | `src/lib/pdf/calcSheet.js`, HTML mirror `src/components/SheetPreview.jsx` |
 | Pump schedule (SOM format) | `src/lib/pdf/schedulePdf.js`, `src/modules/schedule/PumpScheduleTab.jsx` |
@@ -48,7 +48,9 @@ File-slot keys in IndexedDB: entry ids, `lit-<id>-datasheet|drawing`, `reply-<id
 `reply-<id>-prev`, library `lib-*`, pump models `libm-<modelId>-datasheet|drawing|catalogue`.
 Only `lib-*`/`libm-*` slots sync to the cloud.
 
-## Login & cloud (Supabase)
+## Cloud library (Supabase)
+- The site itself is open. Signing in (Document Library → Cloud library) is only needed to save/share
+  library documents online; without it the library stays in the browser.
 - Users sign in with a **username**; it maps to `<username>@glestima.netlify.app` (no mail sent).
   Public sign-ups are disabled; accounts are created by the admin (existing user: `greenland`).
   Never write passwords into the repo or chat.
@@ -82,4 +84,4 @@ Calculators + submittal builder → Netlify deploy → Excel-format calc sheets,
 animations, themes → technical literature builder → home page folders + credit → comment replies →
 engineering tools → quote → submittal + document library + warranty → compliance statement,
 manual schedule fields, calc-sheet linking → Supabase cloud library → final PDF compression →
-site-wide login page.
+site-wide login page → login page removed again (site open; cloud sign-in only in Document Library).
