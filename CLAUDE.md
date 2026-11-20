@@ -9,7 +9,9 @@ MEP/HVAC pump calculators, pump schedules, technical literature, consultant comm
 engineering tools, and an automatic **quotation → technical submittal PDF** builder with a
 technical compliance statement and a cloud document library.
 
-- Live site: https://glestima.netlify.app (Netlify auto-deploys every push to `main`)
+- Live site: https://glestima.netlify.app (new Netlify account since Nov 2026). Netlify currently builds the
+  production site from branch **`greenland-pump-suite`** – after pushing `main`, also fast-forward that branch
+  (`git push origin main:greenland-pump-suite`) until the owner switches Netlify's production branch to `main`.
 - Repo: GitHub `rameeskk28-max/estima`, branch `main`
 - Supabase project: `glestima` (ref `ryphntbfbuxmugqzkmlg`, region ap-southeast-1)
 
