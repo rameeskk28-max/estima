@@ -39,7 +39,7 @@ function valueRight(rows, re, { text = false } = {}) {
 
 /** Model from a file name like "40FWS-V-52-037M-G.pdf" (only if it looks like a pump code). */
 export function modelFromFileName(name) {
-  const base = String(name || '').replace(/\.[a-z0-9]+$/i, '').replace(/^[0-9a-f]{8}-/i, '');
+  const base = String(name || '').replace(/\.[a-z0-9]+$/i, '').replace(/^[0-9a-f]{8}-/i, '').replace(/_/g, ' ');
   if (/\d+\s*(LPS|L\/S)|AT\s*\d/i.test(base)) return ''; // "6 LPS AT 3 BAR" is a duty, not a model
   return /[A-Z].*\d|\d.*[A-Z]/i.test(base) && base.length <= 40 ? base.replace(/_/g, ' ').trim() : '';
 }
