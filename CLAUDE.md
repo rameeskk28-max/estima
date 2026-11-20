@@ -100,4 +100,7 @@ view transform for orientation; fixtures typed/marked by the user) → trained o
 single-line pipes, bound xrefs): symbol dictionary (DEFAULT_SYMBOLS + user mapping in `drawing.symbols`),
 pipe-layer picker, multi-plan sheets split by floor titles / plan areas, DN vs OD size labels, velocity sizing
 of unlabelled pipes → UX re-organisation: grouped mega-menus, Ctrl+K search, home dashboard (Start here /
-All tools / Current project), calculators with inputs left + sticky results right from 1280 px.
+All tools / Current project), calculators with inputs left + sticky results right from 1280 px → Calculation from Drawings as a 4-step
+workflow (Drawings: multi-file upload + auto type riser/plans/ignore · Building: levels, pump level, served range
+/ destination · Floors: per-floor drawing dropdown + typed fixtures (`drawing.floorFix`), building totals, critical
+floor · Review: editable calculator inputs in `drawing.review`, Save to Submittal via `saveDuty(key, result, inputs)`).

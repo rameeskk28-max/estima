@@ -6,10 +6,10 @@ import { odToNominal, pprId } from './ppr.js';
 import { fixtureWsfu } from './network.js';
 
 export const DRAWING_SYSTEMS = {
-  booster: { label: 'Domestic water booster (fixture units)', calc: 'booster', fixtures: true },
-  transfer: { label: 'Transfer pump (tank → roof tank)', calc: 'transfer', fixtures: false },
-  sump: { label: 'Drainage / sump pump (discharge route)', calc: 'sump', fixtures: false },
-  chw: { label: 'Chilled / hot water circulation (closed loop)', calc: 'chw', fixtures: false },
+  booster: { label: 'Domestic water booster (fixture units)', short: 'Booster', calc: 'booster', fixtures: true, from: 'Pump / booster set at', to: 'Serves floors up to', range: true },
+  transfer: { label: 'Transfer pump (tank → roof tank)', short: 'Transfer', calc: 'transfer', fixtures: false, from: 'Lower tank / pump at', to: 'Upper (roof) tank at' },
+  sump: { label: 'Drainage / sump pump (discharge route)', short: 'Sump', calc: 'sump', fixtures: false, from: 'Sump pit at', to: 'Discharge point at' },
+  chw: { label: 'Chilled / hot water circulation (closed loop)', short: 'Circulation', calc: 'chw', fixtures: false, from: 'Pumps at', to: 'Most remote unit at' },
 };
 
 export const defaultDrawing = () => ({
@@ -28,6 +28,13 @@ export const defaultDrawing = () => ({
   plans: [], // [{ id, name, fileName, fileId, viewTitle, levels: [], summary }]
   symbols: {}, // learned block → type mapping (added to DEFAULT_SYMBOLS)
   sizeBasis: 'od', // sizes written on drawings: 'od' = PPR outside diameter, 'dn' = nominal bore
+  files: [], // [{ id, name, kind: 'riser' | 'plans' | 'ignore', views, levels }]
+  servedFrom: '', // booster: lowest floor served ('' = all)
+  servedTo: '', // booster: highest floor served / transfer, sump: destination level
+  routePlan: '', // transfer / sump / chw: plan view holding the route
+  floorFix: {}, // { levelName: { fixtureName: count } } – typed per floor, replaces the drawing count
+  step: 1,
+  review: null, // calculator inputs prepared for review (editable)
 });
 
 /** Elevations bottom → top at a typical floor height; lowest level is 0. */
@@ -39,51 +46,70 @@ const frictionBar = (q, od, pn, lengthM, C = 150) => (lengthM * FT_PER_M * hwPsi
  * @param {ReturnType<typeof defaultDrawing>} d
  * @param {{ duty?: number }} calcInputs  current calculator inputs (duty pumps, design flow for non-fixture systems)
  */
+const typedOf = (o) => (o && Object.values(o).some((v) => v !== undefined && v !== null && v !== '') ? o : null);
+
+/** Fixtures counted for one floor: typed for that floor › typed for its plan › found on the drawing. */
+export function floorFixtures(d, level, plan) {
+  return typedOf(d.floorFix?.[level]) || typedOf(plan?.manual) || plan?.summary?.fixtures || {};
+}
+export const wsfuOf = (fx) => Object.entries(fx || {}).reduce((s, [k, n]) => s + (Number(n) || 0) * fixtureWsfu(k), 0);
+
+/** Levels (bottom → top) between two names, inclusive; empty names = open ends. */
+export function levelRange(levels, from, to) {
+  const i0 = from ? levels.findIndex((l) => l.name === from) : 0;
+  const i1 = to ? levels.findIndex((l) => l.name === to) : levels.length - 1;
+  if (i0 < 0 || i1 < 0) return levels;
+  return levels.slice(Math.min(i0, i1), Math.max(i0, i1) + 1);
+}
+
+/**
+ * Whole-building result.
+ *  booster: every served floor contributes its fixtures; head checked floor by floor (riser + floor route + static)
+ *  transfer / sump / chw: one route from the "from" level to the "to" level
+ * @param {ReturnType<typeof defaultDrawing>} d
+ */
 export function buildingResult(d, { duty = 1, designFlowLps = null } = {}) {
-  const lv = new Map(d.levels.map((l) => [l.name, l]));
-  const pump = lv.get(d.pumpLevel) || d.levels[0] || { name: '', elev: 0 };
-  // fixtures across all floors
-  const fixtures = {};
-  for (const p of d.plans) {
-    const floors = Math.max(1, p.levels?.length || p.floors || 1);
-    const typed = p.manual && Object.values(p.manual).some((v) => v !== undefined && v !== null && v !== '') ? p.manual : null;
-    for (const [kind, n] of Object.entries(typed || p.summary?.fixtures || {})) if (Number(n) > 0) fixtures[kind] = (fixtures[kind] || 0) + Number(n) * floors;
+  const sys = DRAWING_SYSTEMS[d.system] || DRAWING_SYSTEMS.booster;
+  const levels = d.levels || [];
+  const lv = new Map(levels.map((l) => [l.name, l]));
+  const pump = lv.get(d.pumpLevel) || levels[0] || { name: '', elev: 0 };
+  const planFor = (name) => d.plans.find((p) => (p.levels || []).includes(name)) || null;
+  const loop = d.system === 'chw' ? Number(d.loopFactor) || 1 : 1;
+
+  // floors served (booster) – or the destination only (other systems)
+  let served;
+  if (sys.fixtures) {
+    served = levels.length ? levelRange(levels, d.servedFrom, d.servedTo) : [];
+    // no levels yet: every plan is "a floor"
+    if (!levels.length) served = d.plans.map((p) => ({ name: p.name, elev: 0, plan: p }));
+  } else {
+    const dest = lv.get(d.servedTo) || levels[levels.length - 1] || { name: 'route', elev: 0 };
+    served = [dest];
   }
-  const totalWsfu = Object.entries(fixtures).reduce((s, [k, n]) => s + n * fixtureWsfu(k), 0);
+  const rows = served.map((l) => {
+    const plan = l.plan || (sys.fixtures ? planFor(l.name) : d.plans.find((p) => p.id === d.routePlan) || d.plans[0] || null);
+    const fx = sys.fixtures ? floorFixtures(d, l.name, plan) : {};
+    return { level: l.name, elev: l.elev || 0, plan, fixtures: fx, wsfu: wsfuOf(fx) };
+  });
+
+  const fixtures = {};
+  for (const r of rows) for (const [k, n] of Object.entries(r.fixtures)) if (Number(n) > 0) fixtures[k] = (fixtures[k] || 0) + Number(n);
+  const totalWsfu = wsfuOf(fixtures);
   const demand = ipcDemandGpm(totalWsfu, d.supplyType);
-  const qTotal = DRAWING_SYSTEMS[d.system]?.fixtures ? demand.gpm * LPS_PER_GPM : Number(designFlowLps) || 0;
+  const qTotal = sys.fixtures ? demand.gpm * LPS_PER_GPM : Number(designFlowLps) || 0;
   const qPump = qTotal / Math.max(1, Number(duty) || 1);
 
-  // head per served floor
-  const floors = [];
-  for (const p of d.plans) {
-    const sum = p.summary;
-    if (!sum) continue;
-    const names = p.levels?.length ? p.levels : [p.name];
-    for (const name of names) {
-      const l = lv.get(name) || { name, elev: 0 };
-      const dz = l.elev + (Number(d.outletHeight) || 0) - pump.elev;
-      const stat = d.staticMode === 'signed' ? dz : Math.max(0, dz);
-      const riserLen = Math.abs(l.elev - pump.elev) + (Number(d.riserExtra) || 0);
-      const riserBar = frictionBar(qTotal, d.riserOd, d.pn, riserLen);
-      const floorBar = (sum.frictionM || 0) / M_PER_BAR;
-      const loop = d.system === 'chw' ? Number(d.loopFactor) || 1 : 1;
-      floors.push({
-        plan: p,
-        level: l.name,
-        elev: l.elev,
-        dz,
-        stat,
-        riserLen,
-        riserM: riserBar * M_PER_BAR * loop,
-        floorM: floorBar * M_PER_BAR * loop,
-        totalM: (riserBar + floorBar) * M_PER_BAR * loop + stat,
-      });
-    }
-  }
-  floors.sort((a, b) => b.totalM - a.totalM);
-  const crit = floors[0] || null;
-  return { fixtures, totalWsfu, demand, qTotal, qPump, floors, crit, pump };
+  const floors = rows.map((r) => {
+    const dz = r.elev + (sys.fixtures ? Number(d.outletHeight) || 0 : 0) - pump.elev;
+    const stat = (d.staticMode === 'signed' ? dz : Math.max(0, dz)) + (sys.fixtures || d.system === 'chw' ? 0 : Number(d.extraRise) || 0);
+    const riserLen = Math.abs(r.elev - pump.elev) + (Number(d.riserExtra) || 0);
+    const riserM = frictionBar(qTotal, d.riserOd, d.pn, riserLen) * M_PER_BAR * loop;
+    const floorM = (r.plan?.summary?.frictionM || 0) * loop;
+    const contributes = !sys.fixtures || r.wsfu > 0;
+    return { ...r, dz, stat, riserLen, riserM, floorM, totalM: contributes ? riserM + floorM + (d.system === 'chw' ? 0 : stat) : 0, contributes };
+  });
+  const crit = floors.filter((f) => f.contributes).sort((a, b) => b.totalM - a.totalM)[0] || null;
+  return { fixtures, totalWsfu, demand, qTotal, qPump, floors, crit, pump, served: rows.length };
 }
 
 /** Rows for the head-loss table: riser to the critical floor + that floor's route. */
@@ -100,7 +126,7 @@ export function calcRowsFor(d, res) {
   const passed = d.levels.filter((l) => (l.elev - res.pump.elev) * (c.elev - res.pump.elev) > 0 && Math.abs(l.elev - res.pump.elev) < Math.abs(c.elev - res.pump.elev)).length;
   if (passed) rows.push({ id: rid(), item: 'Tee – Run', size: nom, qty: passed * loop, length: '', flow: qRiser, eq: '', idIn });
   rows.push({ id: rid(), item: '90° Elbow', size: nom, qty: 2 * loop, length: '', flow: qRiser, eq: '', idIn });
-  for (const r of c.plan.summary.rows || [])
+  for (const r of c.plan?.summary?.rows || [])
     rows.push({ id: rid(), item: r.item, size: r.size, qty: r.item === 'Straight Pipe' ? 1 : r.qty * loop, length: r.item === 'Straight Pipe' ? Number((r.length * loop).toFixed(2)) : '', flow: r.flow, eq: '', idIn: r.idIn });
   return rows;
 }
@@ -113,9 +139,9 @@ export function calcPatch(d, res) {
     rows: calcRowsFor(d, res),
     material: 'PPR / uPVC',
     idBasis: 'actual',
-    routeImages: c?.plan.summary.image ? [{ src: c.plan.summary.image, caption: `${c.plan.name} – critical route to ${c.plan.summary.targetLabel || 'most remote outlet'} (${fmtN(c.plan.summary.lengthM, 1)} m on plan), riser ${res.pump.name || ''} → ${c.level}` }] : [],
+    routeImages: c?.plan?.summary?.image ? [{ src: c.plan.summary.image, caption: `${c.plan.name} – critical route to ${c.plan.summary.targetLabel || 'most remote outlet'} (${fmtN(c.plan.summary.lengthM, 1)} m on plan), riser ${res.pump.name || ''} → ${c.level}` }] : [],
     routeNote: c
-      ? `Pipe route measured from drawing ${c.plan.fileName || c.plan.name}: riser ${fmtN(c.riserLen, 1)} m (${res.pump.name || 'pump level'} → ${c.level}, typical floor height ${fmtN(d.typicalHeight, 1)} m + ${fmtN(Number(d.riserExtra) || 0, 1)} m horizontal) + floor route ${fmtN(c.plan.summary.lengthM, 1)} m. Pipe internal diameters: PPR ${d.pn}.`
+      ? `Pipe route measured from drawing ${c.plan?.fileName || c.plan?.name || '(typed values)'}: riser ${fmtN(c.riserLen, 1)} m (${res.pump.name || 'pump level'} → ${c.level}, typical floor height ${fmtN(d.typicalHeight, 1)} m + ${fmtN(Number(d.riserExtra) || 0, 1)} m horizontal) + floor route ${fmtN(c.plan?.summary?.lengthM || 0, 1)} m. Pipe internal diameters: PPR ${d.pn}.`
       : '',
   };
   if (sys.calc !== 'chw') patch.staticHeight = Number(((c?.stat || 0) + (sys.fixtures ? 0 : Number(d.extraRise) || 0)).toFixed(2));

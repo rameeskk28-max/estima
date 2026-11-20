@@ -41,7 +41,7 @@ export async function readDwgFile(file) {
 
 /** Floor levels written on a riser diagram ("ROOF", "9th FLOOR", "PODIUM-2", "GROUND FLOOR", "BASEMENT"…), bottom → top. */
 export function levelsFromTexts(texts) {
-  const re = /^((FIRST|SECOND|THIRD|FOURTH|FIFTH|SIXTH|SEVENTH|EIGHTH|NINTH|TENTH)\s+FLOOR|TOP ROOF|ROOF|UPPER ROOF|LOWER ROOF|BASEMENT(\s*(FLOOR|\d+|-\s*\d+))?|B\d|GROUND(\s*FLOOR)?|G\.?F\.?|MEZZ\w*(\s*FLOOR)?|PODIUM[\s-]*\d+|P\d|\d+(ST|ND|RD|TH)\s*FLOOR|LEVEL[\s-]*\d+|L\d{1,2}|SERVICE FLOOR|TECHNICAL FLOOR)$/i;
+  const re = /^((FIRST|SECOND|THIRD|FOURTH|FIFTH|SIXTH|SEVENTH|EIGHTH|NINTH|TENTH)\s+FLOOR|TOP ROOF|ROOF|UPPER ROOF|LOWER ROOF|BASEMENT(\s*(FLOOR|\d+|-\s*\d+))?|GROUND(\s*FLOOR)?|MEZZ\w*(\s*FLOOR)?|PODIUM[\s-]*\d+|\d+(ST|ND|RD|TH)\s*FLOOR|LEVEL[\s-]*\d+|L\d{1,2}|SERVICE FLOOR|TECHNICAL FLOOR)$/i;
   const byName = new Map();
   for (const t of texts) {
     const name = t.text.trim();

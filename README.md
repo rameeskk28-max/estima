@@ -118,7 +118,16 @@ saved online and shared by every signed-in team member.
 Without these variables the site still works and keeps the library in the browser (backup export/import).
 
 
-## Calculation from Drawing (Calculations → From Drawing (DWG))
+## Calculation from Drawings (Design → Calculation from Drawing)
+
+Four steps: **1 Drawings** (drop all DWG/PDF files at once – each is recognised as riser, floor plan sheet or
+ignored; change it if needed) · **2 Building** (levels from the riser or plan titles, typical height, pump
+location, floors served / destination level) · **3 Floors & route** (drawing per floor from a dropdown – a
+typical plan can serve many floors – fixtures per floor editable, whole-building WSFU and flow, critical floor)
+· **4 Review & save** (every calculator value editable, live result, Save to Submittal / preview A4 / open in
+the calculator).
+
+### Details
 
 Upload the riser diagram and floor plans as AutoCAD/Revit **.dwg** files. Everything runs in the browser
 (LibreDWG WebAssembly, loaded on first use, ~11 MB):

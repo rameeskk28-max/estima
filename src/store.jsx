@@ -202,12 +202,12 @@ export function StoreProvider({ children }) {
     setInputs((s) => ({ ...s, [key]: typeof updater === 'function' ? updater(s[key]) : updater }));
   }, []);
 
-  const saveDuty = useCallback((calcKey, result) => {
+  const saveDuty = useCallback((calcKey, result, inputsUsed = null) => {
     const d = result.duty;
     let replaced = false;
     setDuties((list) => {
       const idx = list.findIndex((x) => x.tag.trim().toUpperCase() === d.tag.trim().toUpperCase());
-      const rec = { ...d, id: idx >= 0 ? list[idx].id : uid(), calcKey, sheet: result.sheet, inputs: inputs[calcKey], savedAt: new Date().toISOString() };
+      const rec = { ...d, id: idx >= 0 ? list[idx].id : uid(), calcKey, sheet: result.sheet, inputs: inputsUsed || inputs[calcKey], savedAt: new Date().toISOString() };
       if (idx >= 0) {
         replaced = true;
         const copy = [...list];
