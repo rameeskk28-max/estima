@@ -12,7 +12,7 @@ export const ORDER_SECTIONS = [
 ];
 export const orderSlot = (o, key) => `ord-${o.id}-${key}`;
 
-export const newCostRow = (o = {}) => ({ id: rid(), name: '', qty: 1, pump: '', panel: '', assembly: '', vfdKw: '', vfd: '', vesselSize: '', vessel: '', fittings: '', quoted: '', ...o });
+export const newCostRow = (o = {}) => ({ id: rid(), name: '', qty: 1, pump: '', vfdKw: '', vfd: '', vesselSize: '', vessel: '', ...o });
 export const newItemRow = (o = {}) => ({ id: rid(), code: '', model: '', qty: 1, current: '', ...o });
 
 export function newOrder(project = {}, quote = null) {
@@ -33,6 +33,7 @@ export function newOrder(project = {}, quote = null) {
       { id: rid(), label: 'Delivery / terms', value: '' },
     ],
     currency: 'AED',
+    common: { panel: '', assembly: '', quoted: '' },
     costing: (quote?.items || []).length
       ? quote.items.map((it) => newCostRow({ name: [it.title || it.system, it.model].filter(Boolean).join(' – '), qty: Number(it.qty) || 1 }))
       : [newCostRow()],
@@ -43,23 +44,38 @@ export function newOrder(project = {}, quote = null) {
 }
 
 const num = (v) => (v === '' || v == null ? 0 : Number(v) || 0);
-export const COST_PARTS = ['pump', 'panel', 'assembly', 'vfd', 'vessel', 'fittings'];
+export const COST_PARTS = ['pump', 'vfd', 'vessel'];
 
-/** Net cost (per set × qty), margin and markup on cost. */
+/** One pump row: (pump incl. duty + VFD + pressure vessel) × qty. */
 export function costRow(r) {
   const unit = COST_PARTS.reduce((s, k) => s + num(r[k]), 0);
-  const qty = Math.max(0, num(r.qty) || 0);
-  const net = unit * qty;
-  const quoted = num(r.quoted);
+  const qty = Math.max(0, num(r.qty));
+  return { unit, qty, total: unit * qty, pump: num(r.pump) * qty, vfd: num(r.vfd) * qty, vessel: num(r.vessel) * qty };
+}
+
+/** Older orders kept panel / assembly / quoted on each row → whole-order figures. */
+export function commonOf(o) {
+  if (o.common) return o.common;
+  const sum = (k) => (o.costing || []).reduce((s, r) => s + num(r[k]) * (k === 'quoted' ? 1 : Math.max(1, num(r.qty))), 0) || '';
+  return { panel: sum('panel'), assembly: sum('assembly'), quoted: sum('quoted') };
+}
+
+/** Whole-order summary in the costing-template order. Net margin % = markup on cost. */
+export function costSummary(o) {
+  const rows = (o.costing || []).map(costRow);
+  const c = commonOf(o);
+  const pump = rows.reduce((s, r) => s + r.pump, 0);
+  const vfd = rows.reduce((s, r) => s + r.vfd, 0);
+  const vessel = rows.reduce((s, r) => s + r.vessel, 0);
+  const panel = num(c.panel);
+  const assembly = num(c.assembly);
+  const net = pump + vfd + vessel + panel + assembly;
+  const quoted = num(c.quoted);
   const margin = quoted - net;
-  const markup = net > 0 ? (margin / net) * 100 : null;
-  return { unit, qty, net, quoted, margin, markup };
+  return { pump, vfd, vessel, panel, assembly, net, quoted, margin, markup: net > 0 && quoted ? (margin / net) * 100 : null };
 }
-export function costTotals(rows) {
-  const t = rows.map(costRow).reduce((a, r) => ({ net: a.net + r.net, quoted: a.quoted + r.quoted }), { net: 0, quoted: 0 });
-  const margin = t.quoted - t.net;
-  return { ...t, margin, markup: t.net > 0 ? (margin / t.net) * 100 : null };
-}
+/** @deprecated kept for callers expecting { net, quoted, margin, markup } */
+export const costTotals = (rowsOrOrder) => costSummary(Array.isArray(rowsOrOrder) ? { costing: rowsOrOrder } : rowsOrOrder);
 
 const money = (v, cur = 'AED') => (v == null || !Number.isFinite(v) ? '–' : `${v < 0 ? '-' : ''}${Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
 const pct = (v) => (v == null ? '–' : `${v.toFixed(1)} %`);
@@ -79,49 +95,50 @@ export function detailsSheet(o) {
 
 export function costingSheet(o) {
   const cur = o.currency || 'AED';
-  const rows = o.costing.map((r) => ({ r, c: costRow(r) }));
-  const tot = costTotals(o.costing);
+  const sm = costSummary(o);
+  const project = o.details.find((d) => /project/i.test(d.label))?.value || 'ORDER';
   return {
     ...header(o, 'COSTING & MARGIN'),
     sections: [
       {
         type: 'grid',
-        title: `1. COST BREAK-UP PER PUMP SET (${cur})`,
+        title: `1. PUMP COSTS (${cur})`,
         columns: [
-          { label: 'No.', w: 0.04, align: 'c' },
-          { label: 'Pump set / item', w: 0.2 },
-          { label: 'Qty', w: 0.05, align: 'c' },
-          { label: 'Pump', w: 0.08, align: 'r' },
-          { label: 'Control panel', w: 0.08, align: 'r' },
-          { label: 'Assembly', w: 0.08, align: 'r' },
-          { label: 'VFD (kW)', w: 0.06, align: 'c' },
-          { label: 'VFD', w: 0.075, align: 'r' },
-          { label: 'Vessel size', w: 0.075, align: 'c' },
-          { label: 'Vessel', w: 0.075, align: 'r' },
-          { label: 'Fittings', w: 0.075, align: 'r' },
-          { label: 'Cost / set', w: 0.08, align: 'r' },
+          { label: 'No.', w: 0.05, align: 'c' },
+          { label: 'Pump model', w: 0.25 },
+          { label: 'Qty', w: 0.06, align: 'c' },
+          { label: 'Pump cost (incl. duty)', w: 0.12, align: 'r' },
+          { label: 'VFD kW', w: 0.07, align: 'c' },
+          { label: 'VFD cost', w: 0.11, align: 'r' },
+          { label: 'PV size', w: 0.09, align: 'c' },
+          { label: 'PV cost', w: 0.11, align: 'r' },
+          { label: 'Total', w: 0.14, align: 'r' },
         ],
-        rows: rows.map(({ r, c }, k) => ({
-          c: [String(k + 1), t(r.name), t(r.qty), money(num(r.pump)), money(num(r.panel)), money(num(r.assembly)), t(r.vfdKw), money(num(r.vfd)), t(r.vesselSize), money(num(r.vessel)), r.fittings === '' ? '–' : money(num(r.fittings)), money(c.unit)],
-        })),
+        rows: [
+          ...o.costing.map((r, k) => ({ c: [String(k + 1), t(r.name), t(r.qty), money(num(r.pump)), t(r.vfdKw), money(num(r.vfd)), t(r.vesselSize), money(num(r.vessel)), money(costRow(r).total)] })),
+          { c: ['', 'TOTAL', '', money(sm.pump), '', money(sm.vfd), '', money(sm.vessel), money(sm.pump + sm.vfd + sm.vessel)], bold: true },
+        ],
+        legend: ['Costs per unit; Total = (pump + VFD + pressure vessel) × qty. Pump cost includes duty.'],
       },
       {
         type: 'grid',
-        title: `2. NET COST, QUOTED VALUE & MARGIN (${cur})`,
+        title: `2. COST SUMMARY (${cur})`,
         columns: [
-          { label: 'No.', w: 0.05, align: 'c' },
-          { label: 'Pump set / item', w: 0.31 },
-          { label: 'Qty', w: 0.06, align: 'c' },
-          { label: 'Net cost', w: 0.15, align: 'r' },
-          { label: 'Quoted value', w: 0.15, align: 'r' },
-          { label: 'Net margin', w: 0.15, align: 'r' },
-          { label: 'Markup on cost', w: 0.13, align: 'r' },
+          { label: 'Cost Component', w: 0.6 },
+          { label: String(project).toUpperCase(), w: 0.4, align: 'r' },
         ],
         rows: [
-          ...rows.map(({ r, c }, k) => ({ c: [String(k + 1), t(r.name), t(r.qty), money(c.net), money(c.quoted), money(c.margin), pct(c.markup)], tone: c.margin < 0 ? { col: 5, color: 'red' } : undefined })),
-          { c: ['', 'TOTAL', '', money(tot.net), money(tot.quoted), money(tot.margin), pct(tot.markup)], bold: true, tone: tot.margin < 0 ? { col: 5, color: 'red' } : { col: 5, color: 'green' } },
+          { c: ['Pump Cost (incl. duty)', money(sm.pump)] },
+          { c: ['VFD Cost', money(sm.vfd)] },
+          { c: ['PV Cost', money(sm.vessel)] },
+          { c: ['Control Panel Cost', money(sm.panel)] },
+          { c: ['Assembly Cost', money(sm.assembly)] },
+          { c: ['Net Cost', money(sm.net)], bold: true },
+          { c: ['Quoted Value', money(sm.quoted)] },
+          { c: ['Net Margin', money(sm.margin)], bold: true, tone: { col: 1, color: sm.margin < 0 ? 'red' : 'green' } },
+          { c: ['Net Margin % (on cost)', pct(sm.markup)], bold: true, tone: { col: 1, color: sm.margin < 0 ? 'red' : 'green' } },
         ],
-        legend: ['Net cost = (pump + control panel + assembly + VFD + pressure vessel + fittings) × qty. Net margin = quoted value − net cost. Markup on cost = net margin ÷ net cost × 100.'],
+        legend: ['Net cost = pump + VFD + pressure vessel + control panel + assembly. Net margin = quoted value − net cost. Net margin % = net margin ÷ net cost × 100.'],
       },
     ],
   };

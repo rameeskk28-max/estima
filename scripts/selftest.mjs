@@ -275,13 +275,14 @@ import { findTanks } from '../src/lib/drawing/network.js';
 }
 
 // Order processing: costing, margin & compiled order file
-import { newOrder, costTotals, costRow, orderEntries } from '../src/lib/orders.js';
+import { newOrder, costSummary, costRow, orderEntries } from '../src/lib/orders.js';
 {
   const o = newOrder({ projectName: 'Synthetic Tower' });
   o.orderNo = 'SO-1';
-  o.costing = [{ id: 'a', name: 'BPS', qty: 1, pump: 12000, panel: 6500, assembly: 2500, vfd: 4200, vessel: 1800, fittings: '', quoted: 36000 }, { id: 'b', name: 'TPS', qty: 2, pump: 8000, panel: 3000, assembly: 1000, quoted: 20000 }];
-  const t = costTotals(o.costing);
-  assert(costRow(o.costing[0]).net === 27000 && t.net === 51000 && t.margin === 5000 && Math.abs(t.markup - 9.8039) < 0.01, `costing: net ${t.net}, margin ${t.margin}, markup ${t.markup.toFixed(1)} % on cost`);
+  o.costing = [{ id: 'a', name: '20FMH3B', qty: 3, pump: 10000, vfd: 5000, vesselSize: '', vessel: 0 }, { id: 'b', name: 'PV 200 L', qty: 1, pump: 0, vfd: 0, vesselSize: '200 L', vessel: 1750 }];
+  o.common = { panel: 20000, assembly: 6000, quoted: 100000 };
+  const t = costSummary(o);
+  assert(costRow(o.costing[0]).total === 45000 && t.pump === 30000 && t.vfd === 15000 && t.vessel === 1750 && t.net === 72750 && t.margin === 27250 && Math.abs(t.markup - 37.457) < 0.01, `costing: per pump × qty + panel + assembly → net ${t.net}, margin ${t.margin}, ${t.markup.toFixed(1)} % on cost`);
   const files = { [`ord-${o.id}-quote`]: [{ name: 'q.pdf', bytes: await sample('Quote', [595.28, 841.89], 0, 2), pages: 2 }] };
   const res = await compileSubmittal({ project: { projectName: 'Synthetic Tower', refNo: 'SO-1' }, entries: orderEntries(o), files, logo, cover: { title: 'ORDER PROCESSING FILE', internal: true } });
   writeFileSync(`${out}/order-file.pdf`, res.bytes);

@@ -8,7 +8,7 @@ import { SheetPreviewModal } from '../../components/SheetPreview.jsx';
 import { compileSubmittal } from '../../lib/pdf/compile.js';
 import { compressPdf } from '../../lib/pdf/compress.js';
 import { matchModel } from '../../lib/quote/generate.js';
-import { ORDER_SECTIONS, orderSlot, newCostRow, newItemRow, costRow, costTotals, orderEntries, costingSheet, money, pct } from '../../lib/orders.js';
+import { ORDER_SECTIONS, orderSlot, newCostRow, newItemRow, costRow, costSummary, commonOf, orderEntries, costingSheet, money, pct } from '../../lib/orders.js';
 
 const STATUS = { open: 'Open', processing: 'In process', delivered: 'Delivered', closed: 'Closed' };
 
@@ -162,7 +162,7 @@ export function OrdersTab() {
           {/* order list */}
           <div className="space-y-2">
             {orders.map((x) => {
-              const tot = costTotals(x.costing);
+              const tot = costSummary(x);
               const name = x.details.find((d) => /project/i.test(d.label))?.value;
               return (
                 <button key={x.id} onClick={() => setSel(x.id)} className={`card w-full rounded-2xl p-3 text-left transition ${o?.id === x.id ? 'border-brand-500/60 bg-brand-500/10' : 'hover:border-brand-500/40'}`}>
@@ -237,7 +237,7 @@ export function OrdersTab() {
                 </Card>
               </div>
 
-              <CostingCard o={o} upd={upd} onPreview={() => setPreview(costingSheet(o))} />
+              <CostingCard o={o} upd={upd} onPreview={() => setPreview({ sheet: costingSheet(o), project: { ...project, projectName: o.details.find((x) => /project/i.test(x.label))?.value || project.projectName, refNo: o.orderNo || project.refNo } })} />
               <ItemsCard o={o} upd={upd} />
 
               <Card title="6. Pump datasheets" icon={BookOpen} actions={<button className="btn-ghost !py-1 text-xs" onClick={fillDatasheets}><Copy size={13} /> Add from Document Library</button>}>
@@ -249,29 +249,34 @@ export function OrdersTab() {
           )}
         </div>
       )}
-      {preview && <SheetPreviewModal open onClose={() => setPreview(null)} sheet={preview} project={project} />}
+      {preview && <SheetPreviewModal open onClose={() => setPreview(null)} sheet={preview.sheet} project={preview.project} />}
     </div>
   );
 }
 
 /* ------------------------------------------------------------------ */
 const COLS = [
-  ['name', 'Pump set / item', 'w-56', 'text'],
-  ['qty', 'Qty', 'w-14', 'num'],
-  ['pump', 'Pump', 'w-24', 'num'],
-  ['panel', 'Control panel', 'w-24', 'num'],
-  ['assembly', 'Assembly', 'w-24', 'num'],
-  ['vfdKw', 'VFD kW', 'w-16', 'num'],
-  ['vfd', 'VFD cost', 'w-24', 'num'],
-  ['vesselSize', 'Vessel size', 'w-24', 'text'],
-  ['vessel', 'Vessel cost', 'w-24', 'num'],
-  ['fittings', 'Fittings (opt.)', 'w-24', 'num'],
-  ['quoted', 'Quoted value', 'w-28', 'num'],
+  ['name', 'Pump model', 'w-56', 'text'],
+  ['qty', 'Qty', 'w-16', 'num'],
+  ['pump', 'Pump cost (incl. duty)', 'w-28', 'num'],
+  ['vfdKw', 'VFD kW', 'w-20', 'num'],
+  ['vfd', 'VFD cost', 'w-28', 'num'],
+  ['vesselSize', 'PV size', 'w-24', 'text'],
+  ['vessel', 'PV cost', 'w-28', 'num'],
 ];
 
 function CostingCard({ o, upd, onPreview }) {
-  const tot = useMemo(() => costTotals(o.costing), [o.costing]);
+  const sm = useMemo(() => costSummary(o), [o]);
+  const common = commonOf(o);
   const set = (id, k, v) => upd({ costing: o.costing.map((r) => (r.id === id ? { ...r, [k]: v } : r)) });
+  const setCommon = (k, v) => upd({ common: { ...common, [k]: v } });
+  const project = o.details.find((d) => /project/i.test(d.label))?.value || 'This order';
+  const line = (label, value, cls = '') => (
+    <tr className={`border-t border-line ${cls}`}>
+      <td className="px-3 py-1.5">{label}</td>
+      <td className="px-3 py-1.5 text-right tabular-nums">{value}</td>
+    </tr>
+  );
   return (
     <Card
       title="4. Costing & margin"
@@ -287,13 +292,14 @@ function CostingCard({ o, upd, onPreview }) {
             <Eye size={13} /> Preview sheet
           </button>
           <button className="btn-ghost !py-1 text-xs" onClick={() => upd({ costing: [...o.costing, newCostRow()] })}>
-            <Plus size={13} /> Add pump set
+            <Plus size={13} /> Add pump
           </button>
         </div>
       }
     >
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Each pump – cost per unit</div>
       <div className="overflow-auto">
-        <table className="w-full min-w-[1300px] text-xs">
+        <table className="w-full min-w-[980px] text-xs">
           <thead className="text-left text-slate-400">
             <tr>
               <th className="px-1 py-1">#</th>
@@ -302,51 +308,71 @@ function CostingCard({ o, upd, onPreview }) {
                   {l}
                 </th>
               ))}
-              <th className="px-1 py-1 text-right">Net cost</th>
-              <th className="px-1 py-1 text-right">Net margin</th>
-              <th className="px-1 py-1 text-right">Markup</th>
+              <th className="px-1 py-1 text-right">Total</th>
               <th />
             </tr>
           </thead>
           <tbody>
-            {o.costing.map((r, i) => {
-              const c = costRow(r);
-              return (
-                <tr key={r.id} className="border-t border-line">
-                  <td className="px-1 py-1 text-slate-500">{i + 1}</td>
-                  {COLS.map(([k, , w, type]) => (
-                    <td key={k} className="px-1 py-1">
-                      <input type={type === 'num' ? 'number' : 'text'} step="any" className={`field ${w} !py-1 text-xs ${type === 'num' ? 'text-right' : ''}`} value={r[k]} onChange={(e) => set(r.id, k, e.target.value)} aria-label={k} />
-                    </td>
-                  ))}
-                  <td className="px-1 py-1 text-right font-semibold text-slate-100">{money(c.net)}</td>
-                  <td className={`px-1 py-1 text-right font-semibold ${c.margin < 0 ? 'text-red-400' : 'text-emerald-400'}`}>{money(c.margin)}</td>
-                  <td className="px-1 py-1 text-right">{pct(c.markup)}</td>
-                  <td>
-                    <button className="btn-ghost !p-1 hover:!text-red-400" onClick={() => upd({ costing: o.costing.filter((x) => x.id !== r.id) })} aria-label="Remove row">
-                      <Trash2 size={13} />
-                    </button>
+            {o.costing.map((r, i) => (
+              <tr key={r.id} className="border-t border-line">
+                <td className="px-1 py-1 text-slate-500">{i + 1}</td>
+                {COLS.map(([k, , w, type]) => (
+                  <td key={k} className="px-1 py-1">
+                    <input type={type === 'num' ? 'number' : 'text'} step="any" className={`field ${w} !py-1 text-xs ${type === 'num' ? 'text-right' : ''}`} value={r[k] ?? ''} onChange={(e) => set(r.id, k, e.target.value)} aria-label={k} />
                   </td>
-                </tr>
-              );
-            })}
+                ))}
+                <td className="px-1 py-1 text-right font-semibold tabular-nums text-slate-100">{money(costRow(r).total)}</td>
+                <td>
+                  <button className="btn-ghost !p-1 hover:!text-red-400" onClick={() => upd({ costing: o.costing.filter((x) => x.id !== r.id) })} aria-label="Remove row">
+                    <Trash2 size={13} />
+                  </button>
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
-      <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
-        {[
-          ['Net cost', `${o.currency} ${money(tot.net)}`],
-          ['Quoted value', `${o.currency} ${money(tot.quoted)}`],
-          ['Net margin', `${o.currency} ${money(tot.margin)}`, tot.margin < 0 ? 'text-red-400' : 'text-emerald-400'],
-          ['Markup on cost', pct(tot.markup)],
-        ].map(([l, v, tone]) => (
-          <div key={l} className="rounded-xl border border-line p-3">
-            <div className="text-[10px] uppercase tracking-wide text-slate-400">{l}</div>
-            <div className={`font-display text-lg font-bold ${tone || 'text-slate-50'}`}>{v}</div>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_420px]">
+        <div>
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">For the whole set ({o.currency})</div>
+          <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {[
+              ['panel', 'Control panel – total'],
+              ['assembly', 'Assembly – total'],
+              ['quoted', 'Quoted value (enter)'],
+            ].map(([k, l]) => (
+              <label key={k} className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                {l}
+                <input type="number" step="any" className={`field mt-1 text-right ${k === 'quoted' ? '!border-amber-500/60 !bg-amber-500/10' : ''}`} value={common[k] ?? ''} onChange={(e) => setCommon(k, e.target.value)} />
+              </label>
+            ))}
           </div>
-        ))}
+          <p className="mt-2 text-[11px] text-slate-500">Pump, VFD and PV costs are per unit × qty. Control panel and assembly are one figure each for the whole set. Net margin % = net margin ÷ net cost.</p>
+        </div>
+        {/* summary – same layout as the costing template */}
+        <div className="overflow-hidden rounded-xl border border-line">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-navy-500/40 text-left text-slate-50">
+                <th className="px-3 py-2">Cost Component</th>
+                <th className="truncate px-3 py-2 text-right">{String(project).toUpperCase()}</th>
+              </tr>
+            </thead>
+            <tbody className="text-slate-200">
+              {line('Pump Cost (incl. duty)', money(sm.pump))}
+              {line('VFD Cost', money(sm.vfd))}
+              {line('PV Cost', money(sm.vessel))}
+              {line('Control Panel Cost', money(sm.panel))}
+              {line('Assembly Cost', money(sm.assembly))}
+              {line('Net Cost', money(sm.net), 'bg-sky-500/10 font-bold text-slate-50')}
+              {line('Quoted Value', money(sm.quoted), 'text-amber-300')}
+              {line('Net Margin', money(sm.margin), `font-bold ${sm.margin < 0 ? 'text-red-400' : 'text-emerald-400'}`)}
+              {line('Net Margin % (on cost)', pct(sm.markup), `font-bold ${sm.margin < 0 ? 'text-red-400' : 'text-emerald-400'}`)}
+            </tbody>
+          </table>
+        </div>
       </div>
-      <p className="mt-2 text-[11px] text-slate-500">Costs are per pump set; net cost = (pump + panel + assembly + VFD + vessel + fittings) × qty. Quoted value is the total for the row. Markup on cost = margin ÷ net cost.</p>
     </Card>
   );
 }
