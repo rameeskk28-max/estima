@@ -57,8 +57,8 @@ export function CalcShell({ calcKey, icon, description, children, pump = true })
           <button className="btn-secondary" onClick={onPdf} disabled={!result || busy}>
             {busy ? <LoaderCircle size={16} className="animate-spin" /> : <Download size={16} />} PDF
           </button>
-          <button className="btn-primary" onClick={() => setPreview(true)} disabled={!result}>
-            <FileText size={16} /> Generate A4 Calculation Sheet
+          <button className="btn-secondary" onClick={() => setPreview(true)} disabled={!result}>
+            <FileText size={16} /> Preview A4 Sheet
           </button>
           <button className="btn-success" onClick={onSave} disabled={!result}>
             <Save size={16} /> {exists ? 'Update' : 'Save to'} Submittal
@@ -66,7 +66,7 @@ export function CalcShell({ calcKey, icon, description, children, pump = true })
         </div>
       </div>
 
-      <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_420px]">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_400px]">
         <div className="min-w-0 space-y-4">
           <Card title="1. Project / Design Information" icon={ClipboardList}>
             <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
@@ -100,8 +100,8 @@ export function CalcShell({ calcKey, icon, description, children, pump = true })
           {pump && result?.fh && <FinalHeadCard i={i} set={set} result={result} closedLoop={calcKey === 'chw'} />}
         </div>
 
-        <aside className="order-first grid gap-4 lg:grid-cols-2 2xl:order-none 2xl:sticky 2xl:top-4 2xl:grid-cols-1 2xl:self-start">
-          <PumpScene type={calcKey} anim={result?.anim} className="self-start" />
+        <aside className="order-first grid gap-4 lg:grid-cols-2 xl:order-none xl:sticky xl:top-24 xl:max-h-[calc(100vh-7rem)] xl:grid-cols-1 xl:self-start xl:overflow-auto">
+          <PumpScene type={calcKey} anim={result?.anim} className="order-last self-start" />
           <Card title="Results" icon={Gauge} actions={<span className="rounded bg-brand-500/15 px-2 py-0.5 text-[11px] font-semibold text-brand-300">LIVE</span>}>
             {!result ? (
               <p className="text-sm text-red-400">Check inputs – calculation could not be completed.</p>

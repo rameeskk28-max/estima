@@ -22,6 +22,12 @@ cloud library), pako (PDF compression), @mlightcad/libredwg-web (DWG reading, wa
 Commands: `npm run dev` · `npm run build` · `npm test` (= `node scripts/selftest.mjs`, synthetic
 data only). Browser checks: Playwright with the preinstalled Chromium against `npx vite preview`.
 
+## Navigation
+One page map in `src/nav.js` (`NAV` groups in workflow order: Design → Submittal → Replies; `ALL_PAGES`,
+`searchPages`) drives the top mega-menus / phone menu (`src/components/Navigation.jsx`), the Ctrl+K search
+(`CommandPalette`) and the home dashboard. Add new pages there. Calculator list lives in
+`src/modules/home/items.js` (separate module to avoid an import cycle).
+
 ## Routing (hash based, `src/App.jsx`)
 `#/` home folders (`src/modules/home/Home.jsx` → `FOLDERS`) · `#/quote/generate|compliance|library`
 · `#/calc/<booster|transfer|sump|vessel|chw>` · `#/schedule` · `#/literature` · `#/submittal`
@@ -91,4 +97,5 @@ P-SANR-FIXT, P-PIPE-IDEN; double-line pipes, fittings as blocks, xref background
 view transform for orientation; fixtures typed/marked by the user) → trained on villa DWGs (AutoCAD, metres,
 single-line pipes, bound xrefs): symbol dictionary (DEFAULT_SYMBOLS + user mapping in `drawing.symbols`),
 pipe-layer picker, multi-plan sheets split by floor titles / plan areas, DN vs OD size labels, velocity sizing
-of unlabelled pipes.
+of unlabelled pipes → UX re-organisation: grouped mega-menus, Ctrl+K search, home dashboard (Start here /
+All tools / Current project), calculators with inputs left + sticky results right from 1280 px.

@@ -11,6 +11,7 @@ import { TOOL_ITEMS, ToolPage, ToolsFolder } from './modules/tools/ToolsTab.jsx'
 import { QUOTE_ITEMS, QuoteGenerator, DocumentLibrary } from './modules/quote/QuoteTab.jsx';
 import { ComplianceTab } from './modules/quote/ComplianceTab.jsx';
 import { DrawingTab } from './modules/drawing/DrawingTab.jsx';
+import { MainNav, MobileNav, SearchButton, CommandPalette } from './components/Navigation.jsx';
 
 const SUB = {
   calc: { items: CALC_ITEMS, short: (c) => c.label.replace(' Pump Set', '').replace('Sump / Sewage', 'Sump') },
@@ -38,6 +39,17 @@ function Shell() {
   const [route, setRoute] = useState(parseRoute);
   const [menu, setMenu] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [search, setSearch] = useState(false);
+  useEffect(() => {
+    const k = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setSearch((x) => !x);
+      }
+    };
+    window.addEventListener('keydown', k);
+    return () => window.removeEventListener('keydown', k);
+  }, []);
   const { toast, theme, setTheme, cloud, cloudSignOut } = useStore();
 
   useEffect(() => {
@@ -81,22 +93,10 @@ function Shell() {
             </span>
           </button>
 
-          <nav className="hidden items-center gap-0.5 text-sm font-medium xl:flex">
-            <NavLink active={route.folder === 'home'} onClick={() => go('')}>
-              Home
-            </NavLink>
-            {FOLDERS.map((f) =>
-              SUB[f.key] ? (
-                <DropMenu key={f.key} folder={f} active={route.folder === f.key} go={go} />
-              ) : (
-                <NavLink key={f.key} active={route.folder === f.key} onClick={() => go(f.route)}>
-                  {f.nav || f.label}
-                </NavLink>
-              ),
-            )}
-          </nav>
+          <MainNav route={route} go={go} />
 
           <div className="flex items-center gap-2">
+            <SearchButton onOpen={() => setSearch(true)} />
             <button onClick={() => setTheme(light ? 'dark' : 'light')} className="glass-pill flex h-10 w-10 items-center justify-center rounded-xl text-slate-300 transition hover:text-slate-50" title={light ? 'Switch to dark theme' : 'Switch to light theme'} aria-label="Toggle theme">
               {light ? <Moon size={17} /> : <Sun size={17} />}
             </button>
@@ -108,33 +108,18 @@ function Shell() {
             <button onClick={() => go('submittal')} className="btn-primary hidden !px-5 !py-2.5 sm:inline-flex">
               Compile Submittal
             </button>
-            <button onClick={() => setMenu((m) => !m)} className="glass-pill flex h-10 w-10 items-center justify-center rounded-xl text-slate-200 xl:hidden" aria-label="Toggle menu">
+            <button onClick={() => setMenu((m) => !m)} className="glass-pill flex h-10 w-10 items-center justify-center rounded-xl text-slate-200 lg:hidden" aria-label="Toggle menu">
               {menu ? <X size={20} /> : <Menu size={20} />}
             </button>
           </div>
         </div>
         {menu && (
-          <div className="border-t border-line px-5 py-5 xl:hidden">
-            <button onClick={() => go('')} className="block py-1.5 text-base font-medium text-slate-200">
-              Home
-            </button>
-            {FOLDERS.map((f) => (
-              <div key={f.key} className="py-1.5">
-                <button onClick={() => go(f.key)} className="flex items-center gap-2 text-base font-medium text-slate-200">
-                  <f.icon size={16} className="text-brand-400" /> {f.label}
-                </button>
-                {SUB[f.key] && (
-                  <div className="ml-6 mt-1 space-y-1 border-l border-line pl-3">
-                    {SUB[f.key].items.map((c) => (
-                      <button key={c.key} onClick={() => go(`${f.key}/${c.key}`)} className="block text-sm text-slate-400 hover:text-slate-50">
-                        {c.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-            <button onClick={() => go('submittal')} className="btn-primary mt-4 w-full">
+          <div className="max-h-[calc(100vh-72px)] overflow-auto border-t border-line bg-ink-900 px-5 py-5 lg:hidden">
+            <div className="mb-4">
+              <SearchButton wide onOpen={() => (setMenu(false), setSearch(true))} />
+            </div>
+            <MobileNav go={go} />
+            <button onClick={() => go('submittal')} className="btn-primary mt-5 w-full">
               Compile Submittal
             </button>
           </div>
@@ -148,57 +133,8 @@ function Shell() {
       </main>
 
       <Footer go={go} />
+      <CommandPalette open={search} onClose={() => setSearch(false)} go={go} />
       <Toast toast={toast} />
-    </div>
-  );
-}
-
-function NavLink({ active, onClick, children }) {
-  return (
-    <button onClick={onClick} className={`rounded-xl px-3.5 py-2 transition ${active ? 'bg-brand-500/15 text-brand-400' : 'text-slate-300 hover:text-slate-50'}`}>
-      {children}
-    </button>
-  );
-}
-
-function DropMenu({ folder, active, go }) {
-  const items = SUB[folder.key].items;
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-  useEffect(() => {
-    const h = (e) => ref.current && !ref.current.contains(e.target) && setOpen(false);
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, []);
-  return (
-    <div ref={ref} className="relative" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
-      <button onClick={() => setOpen((o) => !o)} className={`flex items-center gap-1 rounded-xl px-3.5 py-2 transition ${active ? 'bg-brand-500/15 text-brand-400' : 'text-slate-300 hover:text-slate-50'}`} aria-expanded={open}>
-        {folder.nav || folder.label} <ChevronDown size={14} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
-      {open && (
-        <div className="absolute left-0 top-full z-50 pt-2">
-          <div className="card w-80 rounded-2xl p-2" style={{ background: 'var(--menu-bg, var(--glass-bg))' }}>
-            {items.map((c) => (
-              <button
-                key={c.key}
-                onClick={() => {
-                  setOpen(false);
-                  go(`${folder.key}/${c.key}`);
-                }}
-                className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-brand-500/10"
-              >
-                <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-500/15 text-brand-400">
-                  <c.icon size={16} />
-                </span>
-                <span>
-                  <span className="block text-sm font-semibold text-slate-50">{c.label}</span>
-                  <span className="block text-xs text-slate-400">{c.desc}</span>
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

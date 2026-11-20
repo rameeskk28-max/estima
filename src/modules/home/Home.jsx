@@ -1,18 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, Calculator, TableProperties, BookOpen, Package, MessageSquareReply, Wrench, FileInput, Check, FileCheck2, Gauge, Building2, ArrowUpDown, Waves, Snowflake, Cylinder, Route } from 'lucide-react';
+import { ArrowRight, Calculator, TableProperties, BookOpen, Package, MessageSquareReply, Wrench, FileInput, Check, FileCheck2, Gauge, Route, Search } from 'lucide-react';
+import { NAV } from '../../nav.js';
 import { useStore } from '../../store.jsx';
 import { CALCULATORS } from '../../lib/calcs/index.js';
 import { fmtN } from '../../lib/ipc.js';
 import { PumpScene } from '../../components/PumpScene.jsx';
+import { CALC_ITEMS } from './items.js';
 
-export const CALC_ITEMS = [
-  { key: 'booster', label: 'Booster Pump Set', icon: Building2, desc: 'Fixture units (IPC) → demand, head loss & final head' },
-  { key: 'transfer', label: 'Transfer Pump Set', icon: ArrowUpDown, desc: 'Tank volume & filling time → flow and head' },
-  { key: 'sump', label: 'Sump / Sewage Pump Set', icon: Waves, desc: 'Pit volume & emptying time → flow and head' },
-  { key: 'chw', label: 'Chilled Water Pump Set', icon: Snowflake, desc: 'Cooling load & ΔT → flow; closed-loop head' },
-  { key: 'vessel', label: 'Pressure Vessel', icon: Cylinder, desc: "Boyle's law vessel volume & pre-charge" },
-  { key: 'drawing', label: 'From Drawing (DWG)', icon: Route, desc: 'Read plumbing DWGs – fixtures, pipe routes & fittings → head calculation' },
-];
+export { CALC_ITEMS };
 
 export const FOLDERS = [
   {
@@ -193,213 +188,150 @@ function Counter({ to, suffix, tone = 'text-brand-400' }) {
 }
 
 export function Home({ go }) {
-  const { inputs, duties, schedule, literature, entries, replies, library } = useStore();
-  const ref = useReveal();
-  const booster = useMemo(() => {
-    try {
-      return CALCULATORS.booster.compute(inputs.booster);
-    } catch {
-      return null;
-    }
-  }, [inputs.booster]);
-  const counts = { quote: library.models.length, tools: 8, calc: duties.length, schedule: schedule.rows.length, literature: literature.length, submittal: entries.filter((e) => e.include !== false).length, replies: replies.length };
-  const countLabel = { quote: 'pump models', tools: 'tools', calc: 'saved duties', schedule: 'pumps', literature: 'documents', submittal: 'sections', replies: 'replies' };
-
-  const strip = ['IPC 2009 APPENDIX E', 'HAZEN-WILLIAMS', 'EQUIVALENT LENGTH METHOD', "BOYLE'S LAW VESSEL SIZING", 'A4 CALCULATION SHEETS', 'SOM PUMP SCHEDULE', 'TECHNICAL LITERATURE', 'SUBMITTAL COMPILER'];
-
+  const { duties, schedule, literature, entries, replies, library, project, compliance, drawing } = useStore();
+  const openSearch = () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }));
+  const clauses = compliance.rows.filter((r) => r.type === 'clause').length;
+  const progress = [
+    { label: 'Calculations saved', n: duties.length, route: 'calc/booster', icon: Calculator },
+    { label: 'Pumps in schedule', n: schedule.rows.length, route: 'schedule', icon: TableProperties },
+    { label: 'Literature documents', n: literature.length, route: 'literature', icon: BookOpen },
+    { label: 'Compliance clauses', n: clauses, route: 'quote/compliance', icon: FileCheck2 },
+    { label: 'Submittal sections', n: entries.filter((e) => e.include !== false).length, route: 'submittal', icon: Package },
+    { label: 'Comment replies', n: replies.length, route: 'replies', icon: MessageSquareReply },
+  ];
+  const start = [
+    {
+      title: 'Start from a quotation',
+      text: 'Upload the quotation PDF – pump items, schedule, literature and the full submittal index are generated for you.',
+      icon: FileInput,
+      cta: 'Quote → Submittal',
+      route: 'quote/generate',
+      tone: 'from-brand-500/25',
+    },
+    {
+      title: 'Size a pump set',
+      text: 'Booster, transfer, sump or chilled water – calculation sheets in the Greenland format with references on every step.',
+      icon: Calculator,
+      cta: 'Open calculators',
+      route: 'calc/booster',
+      chips: CALC_ITEMS.filter((c) => c.key !== 'drawing'),
+      tone: 'from-navy-500/25',
+    },
+    {
+      title: 'Calculate from drawings',
+      text: 'Upload riser and floor plans (DWG or CAD PDF) – fixtures, pipe routes and fittings are read for the head calculation.',
+      icon: Route,
+      cta: 'From Drawing',
+      route: 'calc/drawing',
+      tone: 'from-emerald-500/20',
+    },
+  ];
   return (
-    <div ref={ref} className="-mx-4 sm:-mx-6">
-      {/* HERO */}
-      <section className="relative px-4 pb-16 pt-10 sm:px-6 lg:pb-24 lg:pt-16">
-        <div className="mx-auto grid max-w-7xl items-center gap-12 lg:grid-cols-12 lg:gap-8">
-          <div className="text-center lg:col-span-7 lg:text-left">
-            <div className="glass-pill reveal-up mb-6 inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-medium text-brand-400">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-brand-400" />
-              <span>GREENLAND // MEP &amp; HVAC PUMP ENGINEERING SUITE</span>
-            </div>
-            <h1 className="reveal-up mb-6 font-display text-4xl font-bold leading-[1.08] tracking-tight text-slate-50 sm:text-6xl lg:text-[4.2rem]" style={{ transitionDelay: '100ms' }}>
-              Pump calculations &amp; submittals, <br className="hidden sm:block" />
-              <span className="text-gradient-kinetic">engineered &amp; documented</span>
-              <br />
-              <KineticWord />
-            </h1>
-            <p className="reveal-up mx-auto mb-8 max-w-2xl text-base leading-relaxed text-slate-400 sm:text-lg lg:mx-0" style={{ transitionDelay: '200ms' }}>
-              Size booster, transfer, sump and chilled-water pump sets and diaphragm vessels, build the pump schedule and technical literature, and compile a consultant-ready A4 submittal – all in your browser, nothing to install.
-            </p>
-            <div className="reveal-up flex flex-col items-center justify-center gap-4 sm:flex-row lg:justify-start" style={{ transitionDelay: '300ms' }}>
-              <button onClick={() => go('calc/booster')} className="group flex w-full items-center justify-center gap-2 rounded-xl bg-white px-7 py-3.5 text-sm font-semibold text-slate-950 shadow-xl shadow-white/10 transition hover:bg-slate-100 sm:w-auto">
-                Start a calculation <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
-              </button>
-              <button onClick={() => go('submittal')} className="glass-pill flex w-full items-center justify-center gap-2 rounded-xl px-7 py-3.5 text-sm font-medium text-slate-50 transition hover:bg-white/10 sm:w-auto">
-                <FileCheck2 size={16} className="text-brand-400" /> Build a submittal
-              </button>
-            </div>
-          </div>
-
-          <div className="reveal-up relative flex h-[380px] items-center justify-center sm:h-[430px] lg:col-span-5" style={{ transitionDelay: '200ms' }}>
-            <div className="card relative z-20 w-full max-w-md rounded-3xl p-5">
-              <div className="mb-4 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="h-3 w-3 rounded-full bg-rose-500/80" />
-                  <span className="h-3 w-3 rounded-full bg-amber-400/80" />
-                  <span className="h-3 w-3 rounded-full bg-emerald-400/80" />
-                </div>
-                <span className="font-mono text-xs text-slate-400">SYS.BOOSTER // LIVE</span>
-              </div>
-              <PumpScene type="booster" anim={booster?.anim} />
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                <div className="glass-pill rounded-xl p-3">
-                  <p className="text-[11px] uppercase tracking-wider text-slate-400">Flow / pump</p>
-                  <p className="mt-0.5 font-display text-base font-semibold text-slate-50">{fmtN(booster?.duty?.flowLps, 2)} L/s</p>
-                </div>
-                <div className="glass-pill rounded-xl p-3">
-                  <p className="text-[11px] uppercase tracking-wider text-slate-400">Proposed head</p>
-                  <p className="mt-0.5 font-display text-base font-semibold text-brand-400">{fmtN(booster?.duty?.headM, 1)} m</p>
-                </div>
-              </div>
-            </div>
-            <div className="card absolute -top-2 right-0 z-30 flex animate-float-slow items-center gap-3 rounded-2xl px-4 py-3 sm:right-2">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-500/20 text-brand-400">
-                <Check size={18} />
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-slate-50">IPC 2009 referenced</p>
-                <p className="text-[11px] text-slate-400">Every step explained</p>
-              </div>
-            </div>
-            <div className="card absolute -bottom-3 left-0 z-30 flex animate-float-medium items-center gap-3 rounded-2xl px-4 py-3 sm:left-2">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-navy-500/20 text-navy-400">
-                <Gauge size={18} />
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-slate-50">A4 PDF ready</p>
-                <p className="text-[11px] text-slate-400">Sheets, schedule &amp; literature</p>
-              </div>
-            </div>
-          </div>
+    <div className="space-y-8 pt-6">
+      {/* greeting + search */}
+      <section className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-400">Greenland · Pump Engineering Suite</p>
+          <h1 className="mt-1 font-display text-3xl font-bold tracking-tight text-slate-50 sm:text-4xl">What would you like to do?</h1>
+          <p className="mt-1 max-w-2xl text-sm text-slate-400">Calculations, pump schedule, technical literature, compliance and the compiled A4 submittal – in one place.</p>
         </div>
+        <button onClick={openSearch} className="card flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm text-slate-400 transition hover:border-brand-500/50 lg:w-96">
+          <Search size={18} className="text-brand-400" />
+          <span className="flex-1">Find a tool – booster, NPSH, compliance…</span>
+          <kbd className="rounded-md border border-line px-1.5 py-0.5 text-[10px] text-slate-500">Ctrl K</kbd>
+        </button>
       </section>
 
-      {/* MARQUEE */}
-      <section className="overflow-hidden border-y border-line py-7">
-        <p className="mb-4 text-center font-mono text-xs uppercase tracking-[0.2em] text-slate-500">Engineering methods built in</p>
-        <div className="relative flex overflow-x-hidden">
-          <div className="flex animate-marquee items-center gap-14 whitespace-nowrap py-1 font-display text-lg font-semibold tracking-wider text-slate-400/80">
-            {[...strip, ...strip].map((s, k) => (
-              <span key={k} className="flex items-center gap-14">
-                <span>{s}</span>
-                <span className="text-brand-500">•</span>
+      {/* start here */}
+      <section>
+        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Start here</h2>
+        <div className="grid gap-4 md:grid-cols-3">
+          {start.map((c) => (
+            <div key={c.title} className={`card group relative flex flex-col overflow-hidden rounded-3xl bg-gradient-to-br ${c.tone} to-transparent p-6`}>
+              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-500/15 text-brand-400">
+                <c.icon size={22} />
               </span>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* FOLDERS */}
-      <section className="px-4 py-20 sm:px-6 lg:py-24">
-        <div className="mx-auto max-w-7xl">
-          <div className="reveal-up mx-auto mb-14 max-w-3xl text-center">
-            <span className="font-mono text-xs uppercase tracking-widest text-brand-400">Workspace</span>
-            <h2 className="mb-4 mt-3 font-display text-3xl font-bold text-slate-50 sm:text-5xl">Seven folders, one workflow</h2>
-            <p className="text-base text-slate-400 sm:text-lg">Everything is grouped by what you deliver. Open a folder to work on its documents – your data is saved automatically in this browser.</p>
-          </div>
-          <div className="grid gap-6 md:grid-cols-2 lg:gap-8 xl:grid-cols-6">
-            {FOLDERS.map((f, i) => (
-              <div
-                key={f.key}
-                {...tilt}
-                onClick={() => go(f.route)}
-                role="link"
-                tabIndex={0}
-                onKeyDown={(e) => e.key === 'Enter' && go(f.route)}
-                className={`card tilt-card reveal-up group cursor-pointer rounded-3xl p-7 sm:p-8 xl:col-span-2 ${f.tone === 'brand' ? 'hover:border-brand-500/50' : 'hover:border-navy-400/50'}`}
-                style={{ transitionDelay: `${i * 90}ms` }}
-              >
-                <div className="tilt-card-content">
-                  <div className="mb-6 flex items-start justify-between gap-4">
-                    <div className={`flex h-12 w-12 items-center justify-center rounded-2xl border ${f.tone === 'brand' ? 'border-brand-500/25 bg-brand-500/15 text-brand-400' : 'border-navy-400/25 bg-navy-500/15 text-navy-400'}`}>
-                      <f.icon size={22} />
-                    </div>
-                    <span className="glass-pill rounded-full px-3 py-1 text-xs text-slate-300">
-                      <b className="text-slate-50">{counts[f.key]}</b> {countLabel[f.key]}
-                    </span>
-                  </div>
-                  <div className="mb-1 font-mono text-[11px] uppercase tracking-widest text-slate-500">Folder 0{i + 1}</div>
-                  <h3 className="mb-3 font-display text-2xl font-bold text-slate-50">{f.label}</h3>
-                  <p className="mb-5 text-sm leading-relaxed text-slate-400">{f.desc}</p>
-                  <ul className="mb-6 space-y-1.5">
-                    {f.items.map((it) => (
-                      <li key={it.label}>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            go(it.route);
-                          }}
-                          className="flex items-center gap-2 text-sm text-slate-300 transition hover:text-brand-400"
-                        >
-                          <span className={f.tone === 'brand' ? 'text-brand-400' : 'text-navy-400'}>✓</span> {it.label}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                  <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${f.tone === 'brand' ? 'text-brand-400' : 'text-navy-400'}`}>
-                    Open folder <ArrowRight size={14} className="transition-transform group-hover:translate-x-1" />
-                  </span>
+              <h3 className="mt-4 font-display text-lg font-bold text-slate-50">{c.title}</h3>
+              <p className="mt-1 flex-1 text-sm leading-relaxed text-slate-400">{c.text}</p>
+              {c.chips && (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {c.chips.map((k) => (
+                    <button key={k.key} onClick={() => go(`calc/${k.key}`)} className="glass-pill rounded-full px-2.5 py-1 text-xs text-slate-300 transition hover:text-brand-400">
+                      {k.label.replace(' Pump Set', '').replace('Sump / Sewage', 'Sump')}
+                    </button>
+                  ))}
                 </div>
-              </div>
-            ))}
-          </div>
+              )}
+              <button onClick={() => go(c.route)} className="btn-primary mt-4 self-start">
+                {c.cta} <ArrowRight size={15} className="transition-transform group-hover:translate-x-0.5" />
+              </button>
+            </div>
+          ))}
         </div>
       </section>
 
-      {/* WORKFLOW */}
-      <section className="border-y border-line px-4 py-20 sm:px-6">
-        <div className="mx-auto max-w-7xl">
-          <div className="reveal-up mb-10">
-            <span className="font-mono text-xs uppercase tracking-widest text-navy-400">How it works</span>
-            <h2 className="mt-2 font-display text-3xl font-bold text-slate-50 sm:text-5xl">From duty point to submittal</h2>
-          </div>
-          <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-5">
-            {[
-              ['01', 'Calculate', 'Enter the tank, fixtures or load. Flow, head loss and final head are calculated live and saved as an A4 sheet.'],
-              ['02', 'Schedule', 'Import the duties into the SOM pump schedule and add brand, model, MOC and motor data.'],
-              ['03', 'Literature', 'Generate technical literature per system and attach the pump datasheet and drawing.'],
-              ['04', 'Compile', 'Add certificates and profiles, then compile one A4 PDF with cover, TOC and dividers.'],
-              ['05', 'Reply', 'When comments come back, answer each one with status and annexure, and re-issue the revision.'],
-            ].map(([n, t, d], i) => (
-              <div key={n} className="card reveal-up rounded-2xl p-6" style={{ transitionDelay: `${i * 90}ms` }}>
-                <div className="mb-3 font-display text-3xl font-bold text-brand-500/80">{n}</div>
-                <div className="mb-2 font-display text-lg font-semibold text-slate-50">{t}</div>
-                <p className="text-sm leading-relaxed text-slate-400">{d}</p>
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+        {/* every tool */}
+        <section>
+          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">All tools</h2>
+          <div className="grid items-start gap-4 md:grid-cols-3">
+            {NAV.map((g) => (
+              <div key={g.key} className="card rounded-3xl p-4">
+                <div className="mb-2 flex items-center gap-2 px-1">
+                  <g.icon size={16} className="text-brand-400" />
+                  <span className="font-display font-bold text-slate-50">{g.label}</span>
+                </div>
+                <p className="mb-3 px-1 text-xs text-slate-500">{g.desc}</p>
+                {g.sections.map((s) => (
+                  <div key={s.title} className="mb-2">
+                    <div className="px-1 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">{s.title}</div>
+                    {s.items.map((it) => (
+                      <button key={it.route} onClick={() => go(it.route)} className="flex w-full items-center gap-2 rounded-lg px-1.5 py-1.5 text-left text-sm text-slate-300 transition hover:bg-brand-500/10 hover:text-slate-50">
+                        <it.icon size={15} className="shrink-0 text-slate-500" />
+                        <span className="truncate">{it.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                ))}
               </div>
             ))}
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* METRICS */}
-      <section className="px-4 py-20 sm:px-6">
-        <div className="card reveal-up mx-auto max-w-7xl rounded-3xl p-8 sm:p-14">
-          <div className="grid grid-cols-2 gap-8 text-center lg:grid-cols-4">
-            <div>
-              <Counter to={5} suffix=" calcs" />
-              <p className="mt-2 text-xs uppercase tracking-wider text-slate-400 sm:text-sm">Pump & vessel calculators</p>
+        {/* current project */}
+        <section>
+          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Current project</h2>
+          <div className="card rounded-3xl p-5">
+            <div className="font-display text-lg font-bold text-slate-50">{project.projectName || 'No project set yet'}</div>
+            <div className="text-xs text-slate-400">
+              {[project.refNo, project.client, project.consultant].filter(Boolean).join(' · ') || 'Set the project header in Submittal Package'}
             </div>
-            <div>
-              <Counter to={21} suffix=" cols" tone="text-navy-400" />
-              <p className="mt-2 text-xs uppercase tracking-wider text-slate-400 sm:text-sm">SOM pump schedule</p>
+            <div className="mt-4 space-y-1">
+              {progress.map((p) => (
+                <button key={p.label} onClick={() => go(p.route)} className="flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-left text-sm transition hover:bg-brand-500/10">
+                  <p.icon size={15} className={p.n ? 'text-brand-400' : 'text-slate-600'} />
+                  <span className="flex-1 text-slate-300">{p.label}</span>
+                  <span className={`tabular-nums font-semibold ${p.n ? 'text-slate-50' : 'text-slate-600'}`}>{p.n}</span>
+                </button>
+              ))}
             </div>
-            <div>
-              <Counter to={14} suffix=" items" />
-              <p className="mt-2 text-xs uppercase tracking-wider text-slate-400 sm:text-sm">UAE submittal index</p>
+            {drawing?.plans?.length > 0 && (
+              <button onClick={() => go('calc/drawing')} className="mt-2 w-full rounded-lg bg-brand-500/10 px-3 py-2 text-left text-xs text-brand-300">
+                {drawing.plans.length} drawing plan(s) open in Calculation from Drawing →
+              </button>
+            )}
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button onClick={() => go('submittal')} className="btn-secondary !py-2 text-sm">
+                <Package size={15} /> Package
+              </button>
+              <button onClick={() => go('submittal')} className="btn-primary !py-2 text-sm">
+                Compile PDF
+              </button>
             </div>
-            <div>
-              <Counter to={100} suffix="%" tone="text-navy-400" />
-              <p className="mt-2 text-xs uppercase tracking-wider text-slate-400 sm:text-sm">In-browser, A4 output</p>
-            </div>
+            <p className="mt-3 text-[11px] text-slate-500">{library.models.length} pump model(s) in the Document Library.</p>
           </div>
-        </div>
-      </section>
+        </section>
+      </div>
     </div>
   );
 }
