@@ -25,7 +25,9 @@ export const defaultDrawing = () => ({
   riserExtra: 10, // horizontal run / offsets in the riser (m)
   extraRise: 0, // non-booster systems: vertical rise to add (m)
   loopFactor: 2, // closed loop: supply + return
-  plans: [], // [{ id, name, fileName, levels: [], summary }]
+  plans: [], // [{ id, name, fileName, fileId, viewTitle, levels: [], summary }]
+  symbols: {}, // learned block → type mapping (added to DEFAULT_SYMBOLS)
+  sizeBasis: 'od', // sizes written on drawings: 'od' = PPR outside diameter, 'dn' = nominal bore
 });
 
 /** Elevations bottom → top at a typical floor height; lowest level is 0. */

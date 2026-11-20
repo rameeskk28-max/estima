@@ -88,4 +88,7 @@ manual schedule fields, calc-sheet linking → Supabase cloud library → final 
 site-wide login page → login page removed again (site open; cloud sign-in only in Document Library) →
 calculation from DWG drawings (booster/transfer/sump/CHW; tested on Revit-exported plans with layers P-PIPE,
 P-SANR-FIXT, P-PIPE-IDEN; double-line pipes, fittings as blocks, xref background block with sanitary ware) → PDF drawings (vector CAD PDFs: OCG layers, sheet scale,
-view transform for orientation; fixtures typed/marked by the user).
+view transform for orientation; fixtures typed/marked by the user) → trained on villa DWGs (AutoCAD, metres,
+single-line pipes, bound xrefs): symbol dictionary (DEFAULT_SYMBOLS + user mapping in `drawing.symbols`),
+pipe-layer picker, multi-plan sheets split by floor titles / plan areas, DN vs OD size labels, velocity sizing
+of unlabelled pipes.

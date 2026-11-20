@@ -244,5 +244,26 @@ import { levelsFromTexts } from '../src/lib/drawing/readDwg.js';
   assert(lv.join('|') === 'BASEMENT FLOOR|GROUND FLOOR|PODIUM-1|1st FLOOR|2nd FLOOR|ROOF', `levels ordered by name, not drawing position (${lv.join(', ')})`);
 }
 
+// Sheets with several plans: split by floor titles; symbol dictionary
+import { findViews, DEFAULT_SYMBOLS, classifyBlock } from '../src/lib/drawing/network.js';
+{
+  const L = (ax, ay, bx, by) => ({ a: { x: ax, y: ay }, b: { x: bx, y: by }, layer: 'WS BCCWS', color: 3, owner: null });
+  const plan = (dx) => [L(dx, 0, dx + 6000, 0), L(dx + 6000, 0, dx + 6000, 3000), L(dx + 3000, 0, dx + 3000, 2500)];
+  const blk = (name, x, y) => ({ id: x + y, name, label: name, layer: 'CWS', minx: x - 100, maxx: x + 100, miny: y - 100, maxy: y + 100, x, y, parent: null });
+  const flat = {
+    lines: [...plan(0), ...plan(20000)],
+    texts: [{ text: 'GROUND FLOOR', x: 3000, y: -3000, h: 300, layer: 'TITLE-TEXT' }, { text: 'FIRST FLOOR', x: 23000, y: -3000, h: 300, layer: 'TITLE-TEXT' }, { text: 'Ø32 BCWS', x: 1500, y: 150, h: 100, layer: 'T' }],
+    blocks: [blk('wbb11', 6000, 3100), blk('BIB TAP', 3000, 2600), blk('wbb11', 26000, 3100)],
+    unitToMm: 1,
+  };
+  const net = buildNetwork(flat, { include: () => true, symbols: DEFAULT_SYMBOLS });
+  const views = findViews(flat, net);
+  assert(views.length === 2 && views.map((v) => v.title).sort().join('|') === 'FIRST FLOOR|GROUND FLOOR', `sheet split into floor views (${views.map((v) => v.title)})`);
+  assert(net.fixtures.length === 3 && classifyBlock({ name: 'WER' }, DEFAULT_SYMBOLS).kind === 'Gate Valve', 'learned symbols: wbb11 / BIB TAP fixtures, WER gate valve');
+  assert(net.edges.some((e) => e.od === 32 && e.odFromLabel), 'single-line pipe sized from its label');
+  const net2 = buildNetwork(flat, { include: () => true, symbols: DEFAULT_SYMBOLS, sizeBasis: 'dn' });
+  assert(net2.edges.some((e) => e.od === 40 && e.odFromLabel), 'nominal-bore labels: Ø32 (DN) → Ø40 PPR');
+}
+
 if (failures) { console.error(`${failures} failure(s)`); process.exit(1); }
 console.log('All self-tests passed.');

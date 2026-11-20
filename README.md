@@ -139,3 +139,16 @@ Upload the riser diagram and floor plans as AutoCAD/Revit **.dwg** files. Everyt
   PDFs have no named symbols, so fixture types are typed per plan ("Type / correct fixture counts") or
   marked by clicking outlets in the Route view; unmarked outlets share the remaining fixture units.
   Scanned PDFs (pictures) cannot be traced.
+
+### Teaching the reader a drafting standard ("Layers & symbols" on each plan)
+
+- **Pipe layers** are ticked automatically (CWS, BCWS, BCCWS, P-PIPE, WS-…; leaders, text, hot water and
+  xref layers left out) – tick / untick and re-trace.
+- **Symbols near the pipes** are listed with a preview; set what each is (fixture type, valve, meter,
+  equipment, ignore). The dictionary is remembered for all drawings – seeded from Greenland villa drawings:
+  `wbb11` = basin/sink (hot + cold angle valves; in a kitchen → sink), `BIB TAP`, `WER` = gate valve,
+  `DM METER`, `NRV`.
+- **Sizes on the drawing**: PPR outside diameter or nominal bore (DN15/20/25… → PPR one size up).
+- Sheets with several plans are split into floor views by their titles (BASEMENT / GROUND / FIRST FLOOR,
+  TOP ROOF…); untitled sheets into "plan areas". Pipes without a size label get the smallest PPR size
+  within 1.5 m/s for their section flow.

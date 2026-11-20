@@ -36,7 +36,29 @@ const FITTING_RULES = [
   [/arrest|hammer|\bwha\b/i, 'Water Hammer Arrestor'],
   [/heater|geyser|calorifier/i, 'Water Heater'],
 ];
-export function classifyBlock(b) {
+/** Symbol dictionary key: the block's own name (xref prefixes / Revit ids removed), lower case. */
+export const symbolKey = (name) => String(name || '').split('$0$').pop().replace(/-(\d{4,}|V\d+)-[^-]*$/, '').trim().toLowerCase();
+
+/** Learned symbols (seeded from Greenland's villa drawings). Values: a fixture name, a fitting name, 'Water Meter', 'equipment' or 'ignore'. */
+export const DEFAULT_SYMBOLS = {
+  wbb11: 'Wash Basin / Lavatory', // hot + cold angle-valve pair at a basin / sink
+  'bib tap': 'Hose Bibb / Bib Tap',
+  wer: 'Gate Valve', // isolation valve pair (GV)
+  'dm meter': 'Water Meter',
+  nrv: 'Check Valve, Swing',
+  tank: 'equipment',
+  sol: 'ignore',
+};
+export const FITTING_KINDS = ['Gate Valve', 'Ball Valve', 'Check Valve, Swing', 'Butterfly Valve', 'Globe Valve', 'Y-Strainer', 'Angle Valve', 'Water Meter', 'PRV', 'Elbow', 'Tee', 'Reducer', 'In-line item'];
+
+export function classifyBlock(b, symbols = null) {
+  const learned = symbols?.[symbolKey(b.name)];
+  if (learned) {
+    if (learned === 'ignore') return { cls: 'other', kind: '' };
+    if (learned === 'equipment') return { cls: 'equipment', kind: 'Equipment' };
+    if (FITTING_KINDS.includes(learned)) return { cls: 'fitting', kind: learned };
+    return { cls: 'fixture', kind: learned };
+  }
   // symbols grouped from a PDF: their type is assigned by the user (or left unassigned / ignored)
   if (b.preset) {
     if (b.kind === 'ignore') return { cls: 'other', kind: '' };
@@ -53,7 +75,21 @@ export function classifyBlock(b) {
   return { cls: 'other', kind: '' };
 }
 export const UNASSIGNED = 'Unassigned symbol';
+/** Nominal bore → PPR outside diameter (DN15 = Ø20 PPR …). */
+export const DN_TO_OD = { 15: 20, 20: 25, 25: 32, 32: 40, 40: 50, 50: 63, 65: 75, 80: 90, 100: 110, 125: 125, 150: 160 };
 export const fixtureWsfu = (kind) => (kind === UNASSIGNED ? 0 : FIXTURES.find((f) => f.name === kind)?.wsfu ?? 1);
+
+function roomKind(flat, b, k) {
+  let best = null;
+  let bd = 3000; // mm
+  for (const t of flat.texts) {
+    if (!/^(KITCHEN|PANTRY|LAUNDRY|WASH(ING)? AREA|UTILITY)\b/i.test(t.text)) continue;
+    const d = Math.hypot(t.x * k - b.x * k, t.y * k - b.y * k);
+    if (d < bd) (bd = d), (best = t.text);
+  }
+  if (!best) return null;
+  return /LAUNDRY|WASH|UTILITY/i.test(best) ? 'Laundry Tub' : 'Kitchen Sink';
+}
 
 /* ---------------- geometry helpers ---------------- */
 const len = (a, b) => Math.hypot(b.x - a.x, b.y - a.y);
@@ -64,7 +100,8 @@ const len = (a, b) => Math.hypot(b.x - a.x, b.y - a.y);
  */
 export function buildNetwork(flat, opt) {
   const k = flat.unitToMm || 1;
-  const symbolIds = new Set(flat.blocks.filter((b) => classifyBlock(b).cls !== 'other').map((b) => b.id));
+  const SYM = opt.symbols || null;
+  const symbolIds = new Set(flat.blocks.filter((b) => classifyBlock(b, SYM).cls !== 'other').map((b) => b.id));
   const tiny = new Set(flat.blocks.filter((b) => Math.hypot(b.maxx - b.minx, b.maxy - b.miny) * k < 400).map((b) => b.id));
   const raw = flat.lines.filter((l) => opt.include(l) && !(l.owner != null && (symbolIds.has(l.owner) || tiny.has(l.owner))) && !l.arc);
   const segs = raw
@@ -251,7 +288,9 @@ export function buildNetwork(flat, opt) {
   const fixtures = [];
   const equipment = [];
   for (const b of flat.blocks) {
-    const { cls, kind } = classifyBlock(b);
+    const { cls, kind: kind0 } = classifyBlock(b, SYM);
+    // room context: a basin symbol in a kitchen / pantry is a sink, in a laundry a laundry tub
+    const kind = cls === 'fixture' && kind0 === 'Wash Basin / Lavatory' ? roomKind(flat, b, k) || kind0 : kind0;
     const box = { minx: b.minx * k, maxx: b.maxx * k, miny: b.miny * k, maxy: b.maxy * k, x: b.x * k, y: b.y * k };
     if (cls === 'fitting') fittings.push({ ...box, kind, label: b.label, id: b.id });
     else if (cls === 'fixture') fixtures.push({ ...box, kind, label: b.label, sig: b.sig, id: b.id, layer: b.layer, nested: b.parent != null, wsfu: fixtureWsfu(kind) });
@@ -267,7 +306,7 @@ export function buildNetwork(flat, opt) {
   };
   for (const f of fittings) items.push({ f, box: f, nodes: endsIn(f), fitting: true });
   for (const b of flat.blocks) {
-    const cls = classifyBlock(b).cls;
+    const cls = classifyBlock(b, SYM).cls;
     if (cls !== 'other') continue;
     const box = { minx: b.minx * k, maxx: b.maxx * k, miny: b.miny * k, maxy: b.maxy * k, x: b.x * k, y: b.y * k };
     const diag = Math.hypot(box.maxx - box.minx, box.maxy - box.miny);
@@ -371,25 +410,55 @@ export function buildNetwork(flat, opt) {
   }
 
   /* 3) sizes: snap OD; unknown sizes from labels ("32 mmØ", "Ø32") or neighbours */
+  // size labels; labels of another system (hot water when tracing cold, etc.) are skipped
+  const skipLabel = opt.skipLabel || /\b(HWS|HWR|HOT|RETURN|DRAIN|SOIL|WASTE|VENT|FIRE)\b/i;
   const labels = flat.texts
+    .filter((t) => !skipLabel.test(t.text))
     .map((t) => {
       const m = t.text.match(/(?:Ø\s*(\d{2,3})(?!\d)|(\d{2,3})\s*mm\s*Ø?)/i);
-      return m ? { x: t.x * k, y: t.y * k, od: snapOd(Number(m[1] || m[2])) } : null;
+      if (!m) return null;
+      const n = Number(m[1] || m[2]);
+      // drawings may give nominal bore (DN15, DN25…) instead of PPR outside diameter
+      const od = opt.sizeBasis === 'dn' ? DN_TO_OD[n] || snapOd(n) : snapOd(n);
+      return { x: t.x * k, y: t.y * k, od };
     })
     .filter(Boolean);
-  for (const e of edges) {
-    if (e.od) e.od = snapOd(e.od);
-    else {
-      const mx = (e.a.x + e.b.x) / 2;
-      const my = (e.a.y + e.b.y) / 2;
-      let best = null;
-      let bd = 1500;
-      for (const l of labels) {
-        const d = Math.hypot(l.x - mx, l.y - my);
-        if (d < bd) (bd = d), (best = l);
-      }
-      if (best) (e.od = best.od), (e.odFromLabel = true);
+  const segDist = (p, e) => {
+    const dx = e.b.x - e.a.x;
+    const dy = e.b.y - e.a.y;
+    const L2 = dx * dx + dy * dy || 1;
+    const t = Math.max(0, Math.min(1, ((p.x - e.a.x) * dx + (p.y - e.a.y) * dy) / L2));
+    return Math.hypot(e.a.x + t * dx - p.x, e.a.y + t * dy - p.y);
+  };
+  for (const e of edges) if (e.od) e.od = snapOd(e.od);
+  // each size label goes to the nearest unsized pipe (labels sit beside the pipe they describe)
+  for (const l of labels) {
+    let best = null;
+    let bd = 900;
+    for (const e of edges) {
+      if (e.paired) continue;
+      const d = segDist(l, e);
+      if (d < bd) (bd = d), (best = e);
     }
+    if (best && (!best.labelD || bd < best.labelD)) (best.od = l.od), (best.odFromLabel = true), (best.labelD = bd);
+  }
+  // carry a labelled size along the same run (through bends, not through tees)
+  for (let pass = 0; pass < 50; pass++) {
+    let changed = false;
+    for (const e of edges) {
+      if (e.od) continue;
+      for (const nid of [e.u, e.v]) {
+        if (G[nid].edges.length !== 2) continue;
+        const o = edges[G[nid].edges.find((id) => id !== e.id)];
+        if (o?.od) {
+          e.od = o.od;
+          e.odFromLabel = true;
+          changed = true;
+          break;
+        }
+      }
+    }
+    if (!changed) break;
   }
   for (let pass = 0; pass < 6; pass++)
     for (const e of edges)
@@ -490,7 +559,7 @@ function dijkstra(net, src) {
 }
 
 /** Pick a likely source: a dangling end on the largest pipe, farthest from the fixtures' centre. */
-export function autoSource(net) {
+export function autoSource(net, allowed = null) {
   // connected components
   const comp = new Array(net.nodes.length).fill(-1);
   let nc = 0;
@@ -508,10 +577,11 @@ export function autoSource(net) {
     }
     nc++;
   }
+  const inView = (id) => !allowed || allowed.has(id);
   const load = new Array(nc).fill(0);
-  for (const f of net.fixtures) if (f.node != null) load[comp[f.node]] += f.wsfu;
+  for (const f of net.fixtures) if (f.node != null && inView(f.node)) load[comp[f.node]] += f.wsfu;
   // main network: most fixture units; without fixtures, the most pipe
-  if (!load.some((x) => x > 0)) for (const e of net.edges) load[comp[e.u]] += e.L / 1e6;
+  if (!load.some((x) => x > 0)) for (const e of net.edges) if (inView(e.u)) load[comp[e.u]] += e.L / 1e6;
   const main = load.indexOf(Math.max(...load));
   const fx = net.fixtures.filter((f) => comp[f.node] === main);
   const cx = fx.reduce((s, f) => s + f.x, 0) / Math.max(1, fx.length);
@@ -594,6 +664,18 @@ export function analyse(net, src, opt = {}) {
     sub[u] += sub[v];
   }
   const flowOf = (eid) => (opt.flowLps != null ? opt.flowLps : ipcDemandGpm(edgeWsfu[eid], opt.supplyType || 'tank').gpm * LPS_PER_GPM);
+  // pipes without a size on the drawing: smallest PPR size within the velocity limit for the section flow
+  const vMax = opt.vMax || 1.5;
+  const odOf = (eid) => {
+    const e = net.edges[eid];
+    if (!e.odGuessed) return e.od;
+    const q = flowOf(eid) / 1000;
+    for (const od of [20, 25, 32, 40, 50, 63, 75, 90, 110, 125, 160]) {
+      const d = pprId(od, pn) / 1000;
+      if ((4 * q) / (Math.PI * d * d) <= vMax) return od;
+    }
+    return 160;
+  };
 
   const pathTo = (target) => {
     const ids = [];
@@ -615,27 +697,29 @@ export function analyse(net, src, opt = {}) {
     eids.forEach((eid, k) => {
       const e = net.edges[eid];
       const q = flowOf(eid);
-      const idMm = pprId(e.od, pn);
+      const od = odOf(eid);
+      const idMm = pprId(od, pn);
       const idIn = idMm / 25.4;
       const psi100 = hwPsiPer100ft(q, C, idIn);
       const Lm = e.L / 1000;
       lengthM += Lm;
       const pipeBar = (Lm * FT_PER_M * psi100) / 100 / PSI_PER_BAR;
       frictionBar += pipeBar;
-      items.push({ type: 'pipe', eid, od: e.od, idMm, nominal: odToNominal(e.od), q, wsfu: edgeWsfu[eid], Lm, bar: pipeBar });
+      items.push({ type: 'pipe', eid, od, idMm, nominal: odToNominal(od), q, wsfu: edgeWsfu[eid], Lm, bar: pipeBar, sizedByFlow: !!e.odGuessed });
       const next = e.u === node ? e.v : e.u;
       // fittings at the node we arrive at (except the final outlet)
       const nn = net.nodes[next];
       const nextE = eids[k + 1] != null ? net.edges[eids[k + 1]] : null;
       if (nextE) {
-        const nominal = odToNominal(nextE.od);
+        const nextOd = odOf(eids[k + 1]);
+        const nominal = odToNominal(nextOd);
         const turn = Math.abs(((angleAt(e, next, net) - angleAt(nextE, next, net) + 3 * Math.PI) % (2 * Math.PI)) - Math.PI);
         const deg = (turn * 180) / Math.PI;
         const fitAdd = (item) => {
           const eq = equivalentLength(item, nominal).ft ?? 0;
-          const bar = (eq * hwPsiPer100ft(flowOf(eids[k + 1]), C, pprId(nextE.od, pn) / 25.4)) / 100 / PSI_PER_BAR;
+          const bar = (eq * hwPsiPer100ft(flowOf(eids[k + 1]), C, pprId(nextOd, pn) / 25.4)) / 100 / PSI_PER_BAR;
           frictionBar += bar;
-          items.push({ type: 'fitting', item, nominal, od: nextE.od, q: flowOf(eids[k + 1]), idMm: pprId(nextE.od, pn), bar, node: next });
+          items.push({ type: 'fitting', item, nominal, od: nextOd, q: flowOf(eids[k + 1]), idMm: pprId(nextOd, pn), bar, node: next });
         };
         if (nn.edges.length >= 3) fitAdd(deg > 45 ? 'Tee – Branch' : 'Tee – Run');
         else if (deg > 60) fitAdd('90° Elbow');
@@ -681,3 +765,112 @@ export function routeRows(items, pn = 'PN20') {
 }
 
 export { PPR };
+
+/* ---------------- sheets with several plans ---------------- */
+const VIEW_TITLE = /^(BASEMENT|LOWER GROUND|GROUND|UPPER GROUND|MEZZANINE|MEZZ|FIRST|SECOND|THIRD|FOURTH|FIFTH|SIXTH|SEVENTH|EIGHTH|NINTH|TENTH|\d+(ST|ND|RD|TH)|TYPICAL|PODIUM[\s-]*\d*|TOP)?\s*(FLOOR|ROOF)(\s+PLAN)?$|^(ROOF|TOP ROOF|ROOF PLAN|GROUND FLOOR PLAN|FIRST FLOOR PLAN)$/i;
+
+/** Floor titles written under plans on one sheet ("GROUND FLOOR", "FIRST FLOOR", "TOP ROOF"). */
+export function viewTitles(flat) {
+  const k = flat.unitToMm || 1;
+  const seen = new Map();
+  for (const t of flat.texts) {
+    const name = t.text.replace(/\s+/g, ' ').trim();
+    // level / section tags ("GROUND FLOOR" on a section mark) are not view titles
+    if (!VIEW_TITLE.test(name) || name.length > 30 || /TAG|SEC|LVL|LEVEL/i.test(t.layer || '')) continue;
+    const key = name.toUpperCase().replace(/\s+PLAN$/, '');
+    const list = seen.get(key) || [];
+    list.push({ x: t.x * k, y: t.y * k, h: (t.h || 0) * k });
+    seen.set(key, list);
+  }
+  // one position per title (largest text wins – the view title, not a level tag)
+  return [...seen.entries()].map(([name, list]) => ({ name, ...list.sort((a, b) => b.h - a.h)[0] }));
+}
+
+/**
+ * Group the pipe network by the floor title of the view it is drawn in.
+ * Returns [] when the sheet has fewer than two titled views.
+ */
+export function findViews(flat, net) {
+  const titles = viewTitles(flat);
+  // components
+  const comp = new Array(net.nodes.length).fill(-1);
+  const comps = [];
+  for (const n of net.nodes) {
+    if (comp[n.id] >= 0 || !n.edges.length) continue;
+    const ids = [];
+    const st = [n.id];
+    comp[n.id] = comps.length;
+    while (st.length) {
+      const u = st.pop();
+      ids.push(u);
+      for (const eid of net.nodes[u].edges) {
+        const e = net.edges[eid];
+        const v = e.u === u ? e.v : e.u;
+        if (comp[v] < 0) (comp[v] = comps.length), st.push(v);
+      }
+    }
+    let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity, len = 0;
+    for (const id of ids) {
+      const g = net.nodes[id];
+      minx = Math.min(minx, g.x); maxx = Math.max(maxx, g.x); miny = Math.min(miny, g.y); maxy = Math.max(maxy, g.y);
+      for (const eid of g.edges) len += net.edges[eid].L / 2;
+    }
+    comps.push({ ids, minx, miny, maxx, maxy, cx: (minx + maxx) / 2, cy: (miny + maxy) / 2, len });
+  }
+  if (titles.length < 2) return areaViews(net, comps);
+  // a title sits under (or above) its plan: weight horizontal distance more than vertical
+  const views = new Map();
+  for (const c of comps) {
+    let best = null;
+    let bd = Infinity;
+    for (const t of titles) {
+      const dx = Math.max(0, Math.abs(t.x - c.cx) - (c.maxx - c.minx) / 2);
+      const dy = t.y < c.miny ? c.miny - t.y : t.y > c.maxy ? (t.y - c.maxy) * 1.5 : 0;
+      const d = dx * 2 + dy;
+      if (d < bd) (bd = d), (best = t);
+    }
+    const span = Math.max(c.maxx - c.minx, c.maxy - c.miny, 5000);
+    const key = best && bd < span * 3 + 15000 ? best.name : 'OTHER (schematic / details)';
+    const v = views.get(key) || { title: key, nodes: new Set(), len: 0, minx: Infinity, miny: Infinity, maxx: -Infinity, maxy: -Infinity };
+    c.ids.forEach((id) => v.nodes.add(id));
+    v.len += c.len;
+    v.minx = Math.min(v.minx, c.minx); v.miny = Math.min(v.miny, c.miny); v.maxx = Math.max(v.maxx, c.maxx); v.maxy = Math.max(v.maxy, c.maxy);
+    views.set(key, v);
+  }
+  const out = [...views.values()].filter((v) => v.len > 1000); // ignore stray bits (< 1 m)
+  return out.length >= 2 ? out : [];
+}
+
+/** Sheets without floor titles: separate plan areas (networks more than 3 m apart) that serve fixtures. */
+function areaViews(net, comps) {
+  const fixNodes = new Set(net.fixtures.flatMap((f) => f.nodes || [f.node]));
+  const big = comps.filter((c) => c.len > 2000);
+  // merge components whose boxes are within 3 m (hot/cold runs of one plan)
+  const par = big.map((_, i) => i);
+  const find = (i) => (par[i] === i ? i : (par[i] = find(par[i])));
+  const gap = 3000;
+  for (let i = 0; i < big.length; i++)
+    for (let j = i + 1; j < big.length; j++) {
+      const A = big[i];
+      const B = big[j];
+      if (A.minx - gap <= B.maxx && B.minx - gap <= A.maxx && A.miny - gap <= B.maxy && B.miny - gap <= A.maxy) par[find(i)] = find(j);
+    }
+  const groups = new Map();
+  big.forEach((c, i) => (groups.get(find(i)) || groups.set(find(i), []).get(find(i))).push(c));
+  const areas = [...groups.values()]
+    .map((cs) => {
+      const v = { nodes: new Set(), len: 0, minx: Infinity, miny: Infinity, maxx: -Infinity, maxy: -Infinity };
+      for (const c of cs) {
+        c.ids.forEach((id) => v.nodes.add(id));
+        v.len += c.len;
+        v.minx = Math.min(v.minx, c.minx); v.miny = Math.min(v.miny, c.miny); v.maxx = Math.max(v.maxx, c.maxx); v.maxy = Math.max(v.maxy, c.maxy);
+      }
+      v.fixtures = [...v.nodes].filter((id) => fixNodes.has(id)).length;
+      return v;
+    })
+    .filter((v) => v.fixtures > 0)
+    .sort((a, b) => a.minx - b.minx || b.maxy - a.maxy);
+  if (areas.length < 2) return [];
+  areas.forEach((v, i) => (v.title = `PLAN AREA ${i + 1}`));
+  return areas;
+}

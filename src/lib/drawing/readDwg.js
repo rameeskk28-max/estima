@@ -41,7 +41,7 @@ export async function readDwgFile(file) {
 
 /** Floor levels written on a riser diagram ("ROOF", "9th FLOOR", "PODIUM-2", "GROUND FLOOR", "BASEMENT"…), bottom → top. */
 export function levelsFromTexts(texts) {
-  const re = /^(ROOF|UPPER ROOF|LOWER ROOF|BASEMENT(\s*(FLOOR|\d+|-\s*\d+))?|B\d|GROUND(\s*FLOOR)?|G\.?F\.?|MEZZ\w*(\s*FLOOR)?|PODIUM[\s-]*\d+|P\d|\d+(ST|ND|RD|TH)\s*FLOOR|LEVEL[\s-]*\d+|L\d{1,2}|SERVICE FLOOR|TECHNICAL FLOOR)$/i;
+  const re = /^((FIRST|SECOND|THIRD|FOURTH|FIFTH|SIXTH|SEVENTH|EIGHTH|NINTH|TENTH)\s+FLOOR|TOP ROOF|ROOF|UPPER ROOF|LOWER ROOF|BASEMENT(\s*(FLOOR|\d+|-\s*\d+))?|B\d|GROUND(\s*FLOOR)?|G\.?F\.?|MEZZ\w*(\s*FLOOR)?|PODIUM[\s-]*\d+|P\d|\d+(ST|ND|RD|TH)\s*FLOOR|LEVEL[\s-]*\d+|L\d{1,2}|SERVICE FLOOR|TECHNICAL FLOOR)$/i;
   const byName = new Map();
   for (const t of texts) {
     const name = t.text.trim();
@@ -60,8 +60,12 @@ export function levelsFromTexts(texts) {
     if ((m = u.match(/PODIUM[\s-]*(\d+)|^P(\d)$/))) return 10 + Number(m[1] || m[2]);
     if (/MEZZ/.test(u)) return 30;
     if ((m = u.match(/^(\d+)(ST|ND|RD|TH)/) || u.match(/^(?:LEVEL[\s-]*|L)(\d+)/))) return 100 + Number(m[1]);
+    const words = ['FIRST', 'SECOND', 'THIRD', 'FOURTH', 'FIFTH', 'SIXTH', 'SEVENTH', 'EIGHTH', 'NINTH', 'TENTH'];
+    const w = words.findIndex((x) => u.startsWith(x));
+    if (w >= 0) return 101 + w;
     if (/SERVICE|TECHNICAL/.test(u)) return 900;
     if (/LOWER ROOF/.test(u)) return 990;
+    if (/TOP ROOF/.test(u)) return 1002;
     if (/ROOF/.test(u)) return 1000 + (/UPPER/.test(u) ? 1 : 0);
     return null;
   };

@@ -1,19 +1,30 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Route, Upload, LoaderCircle, Layers, Trash2, Eye, Send, Crosshair, Flag, Wand2, X, Plus, TriangleAlert, Building2, ZoomIn, Tag, ListOrdered } from 'lucide-react';
+import { Route, Upload, LoaderCircle, Layers, Trash2, Eye, Send, Crosshair, Flag, Wand2, X, Plus, TriangleAlert, Building2, ZoomIn, Tag, ListOrdered, Settings2 } from 'lucide-react';
 import { useStore } from '../../store.jsx';
 import { Card, NumField, SelectField } from '../../components/ui.jsx';
 import { CALCULATORS } from '../../lib/calcs/index.js';
 import { fmtN } from '../../lib/ipc.js';
-import { buildNetwork, analyse, autoSource, routeRows, fixtureWsfu, UNASSIGNED } from '../../lib/drawing/network.js';
+import { buildNetwork, analyse, autoSource, routeRows, fixtureWsfu, UNASSIGNED, findViews, DEFAULT_SYMBOLS, symbolKey, classifyBlock, FITTING_KINDS } from '../../lib/drawing/network.js';
 import { FIXTURES } from '../../lib/ipc.js';
 import { buildingResult, calcPatch, DRAWING_SYSTEMS, levelsWithHeight } from '../../lib/drawing/building.js';
 import { PPR, PN_CLASSES } from '../../lib/drawing/ppr.js';
 import { drawPlan, netBounds, routeImage, OD_COLORS } from '../../lib/drawing/draw.js';
 
 // heavy drawing data stays in memory (not in localStorage)
-const CACHE = new Map();
+const CACHE = new Map(); // plan id → { fileId, flat, net, nodes (view), src, target, res, route }
+const FILES = new Map(); // file id → { flat, layers: string[], net, views }
 const pid = () => `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-const pipeLayer = (l) => /PIPE|PLUMB|WATER|\bCW|\bHW|P-W|-WS|CHW|DRAIN|SANR-PIPE|PL[-_]CW|^CWS$/i.test(l.layer) && !/IDEN|TEXT|ANNO|TAG|DIM/i.test(l.layer);
+/** Layers that normally carry the pipes of this system (hot water excluded unless it is a hot/chilled loop). */
+const isPipeLayerName = (name, hot) =>
+  /PIPE|PLUMB|WATER|CWS|BCWS|BCCWS|\bCW\b|^CW|^WS\b|^WS[ -]|W-CWS|P-W|CHW|DRAIN|SANR-PIPE|PL[-_]CW/i.test(name) && !/IDEN|TEXT|TXT|ANNO|TAG|DIM|ARROW|EQUI|DETAIL|SECTION|LEADER|LDR|NOTE|HEATER|HETER|\$0\$/i.test(name) && (hot || !/HOT|HWS|HWR|RETURN|CHW|CHILL/i.test(name));
+const defaultLayers = (flat, system) => [...new Set(flat.lines.map((l) => l.layer))].filter((n) => isPipeLayerName(n, system === 'chw'));
+const symbolsOf = (d) => ({ ...DEFAULT_SYMBOLS, ...(d.symbols || {}) });
+function buildFile(file, d) {
+  const layers = new Set(file.layers);
+  file.net = buildNetwork(file.flat, { include: (l) => layers.has(l.layer), symbols: symbolsOf(d), sizeBasis: d.sizeBasis });
+  file.views = findViews(file.flat, file.net);
+}
+const viewNodes = (file, title) => (title ? file.views.find((v) => v.title === title)?.nodes || null : null);
 
 /** Guess the floors a plan covers from its title ("3rd, 5th & 7th Floor Typical Floor Plan"). */
 function guessLevels(title, levels) {
@@ -50,7 +61,7 @@ function analysePlan(entry, d, flowLps, override = {}, plan = null) {
   const { net } = entry;
   const sys = DRAWING_SYSTEMS[d.system];
   applyFixtureTypes(net, plan);
-  const src = override.src ?? entry.src ?? autoSource(net);
+  const src = override.src ?? entry.src ?? autoSource(net, entry.nodes);
   const res = analyse(net, src, { supplyType: d.supplyType, pn: d.pn, fixtures: sys.fixtures, flowLps: sys.fixtures ? null : flowLps });
   const target = override.target ?? entry.target ?? null;
   const route = target != null ? res.evaluate(target) || res.critical : res.critical;
@@ -65,7 +76,7 @@ function analysePlan(entry, d, flowLps, override = {}, plan = null) {
   return {
     fixtures,
     wsfu: res.totalWsfu,
-    unreached: net.fixtures.length - res.reached.length,
+    unreached: (entry.nodes ? net.fixtures.filter((f) => (f.nodes || [f.node]).some((id) => entry.nodes.has(id))) : net.fixtures).filter((f) => f.at == null && f.kind !== 'ignore').length,
     unmarked,
     outlets: res.reached.length,
     pdf: entry.flat.source === 'pdf' ? { scale: entry.flat.scale } : null,
@@ -74,8 +85,8 @@ function analysePlan(entry, d, flowLps, override = {}, plan = null) {
     frictionM: route?.frictionM || 0,
     rows: route ? routeRows(route.items, d.pn) : [],
     targetLabel: tgtFix ? tgtFix.kind.split(' –')[0].split(' /')[0] : 'end of pipe',
-    pipesM: net.edges.reduce((s, e) => s + e.L, 0) / 1000,
-    sizes: [...new Set(net.edges.map((e) => e.od))].sort((a, b) => a - b),
+    pipesM: net.edges.filter((e) => !entry.nodes || entry.nodes.has(e.u)).reduce((s2, e) => s2 + e.L, 0) / 1000,
+    sizes: [...new Set(net.edges.filter((e) => !entry.nodes || entry.nodes.has(e.u)).map((e) => e.od))].sort((a, b) => a - b),
     maxV: route ? Math.max(...route.items.filter((i) => i.type === 'pipe').map((i) => (4 * (i.q / 1000)) / (Math.PI * (i.idMm / 1000) ** 2))) : 0,
     image: route ? routeImage(entry.flat, net, route, src, route.target) : '',
   };
@@ -85,7 +96,8 @@ export function DrawingTab() {
   const { drawing: d, setDrawing, inputs, setCalcInputs, notify } = useStore();
   const set = (patch) => setDrawing((x) => ({ ...x, ...(typeof patch === 'function' ? patch(x) : patch) }));
   const [busy, setBusy] = useState('');
-  const [ask, setAsk] = useState(null); // plan id whose floors we are asking about
+  const [ask, setAsk] = useState([]); // plan ids whose floors we still ask about (one dialog after another)
+  const [settingsFor, setSettingsFor] = useState(null); // file id in the layers & symbols dialog
   const [view, setView] = useState(null); // plan id in the viewer
   const [, force] = useState(0);
   const riserRef = useRef(null);
@@ -138,23 +150,66 @@ export function DrawingTab() {
         const flat = await readFile(file);
         setBusy(`Tracing pipes in ${file.name}…`);
         await new Promise((r) => setTimeout(r, 20));
-        const net = buildNetwork(flat, { include: pipeLayer });
-        if (!net.edges.length) throw new Error(`No pipes found in ${file.name} (looked for layers named *PIPE*, *PLUMB*, *WATER*).`);
-        const id = pid();
-        const entry = { flat, net };
-        CACHE.set(id, entry);
-        const summary = analysePlan(entry, d, flowLps);
-        const title = flat.texts.find((t) => /FLOOR PLAN|LAYOUT|PLAN$/i.test(t.text) && t.text.length < 60)?.text || file.name.replace(/\.dwg$/i, '');
-        const name = title.replace(/\s+/g, ' ').trim();
-        set((x) => ({ plans: [...x.plans, { id, name, fileName: file.name, levels: guessLevels(`${name} ${file.name.replace(/_/g, ' ')}`, x.levels), floors: 1, summary }] }));
-        setAsk(id);
-        notify(`${file.name}: ${Object.values(summary.fixtures).reduce((a, b) => a + b, 0)} fixtures, ${fmtN(summary.pipesM, 0)} m of pipe`);
+        const fileId = pid();
+        const fe = { flat, layers: defaultLayers(flat, d.system) };
+        buildFile(fe, d);
+        if (!fe.net.edges.length) throw new Error(`No pipes found in ${file.name} – open “Layers & symbols” on the plan to choose the pipe layers.`);
+        FILES.set(fileId, fe);
+        // one sheet with several titled plans → one plan per floor view
+        const views = fe.views.filter((v) => !/^OTHER/.test(v.title));
+        const parts = views.length ? views : [null];
+        const titleOf = (v) => (v ? v.title : (flat.texts.find((t) => /FLOOR PLAN|LAYOUT|PLAN$/i.test(t.text) && t.text.length < 60)?.text || file.name.replace(/\.(dwg|pdf)$/i, '')).replace(/\s+/g, ' ').trim());
+        // no levels yet? make them from the view titles
+        let levels = d.levels;
+        if (views.length && !levels.length) {
+          const { levelsFromTexts } = await import('../../lib/drawing/readDwg.js');
+          const names = levelsFromTexts(views.map((v) => ({ text: v.title, x: 0, y: 0 })));
+          if (names.length) {
+            levels = levelsWithHeight(names, Number(d.typicalHeight) || 4);
+            set((x) => ({ levels, pumpLevel: x.pumpLevel || names[0] }));
+          }
+        }
+        const created = [];
+        let skipped = 0;
+        for (const v of parts) {
+          const id = pid();
+          const entry = { fileId, flat, net: fe.net, nodes: v ? v.nodes : null };
+          const summary = analysePlan(entry, d, flowLps);
+          // floor views without any fixtures (tank roof, details) are left out of a fixture-unit calculation
+          if (v && sys.fixtures && parts.length > 1 && !Object.keys(summary.fixtures).length && !summary.unmarked) {
+            skipped++;
+            continue;
+          }
+          CACHE.set(id, entry);
+          const name = titleOf(v);
+          created.push({ id, name: v ? `${name} – ${file.name.replace(/\.(dwg|pdf)$/i, '')}` : name, fileName: file.name, fileId, viewTitle: v?.title || null, levels: guessLevels(`${name} ${v ? '' : file.name.replace(/_/g, ' ')}`, levels), floors: 1, summary });
+        }
+        set((x) => ({ plans: [...x.plans, ...created] }));
+        setAsk(created.map((c) => c.id));
+        const nFix = created.reduce((a2, c) => a2 + Object.values(c.summary.fixtures).reduce((a3, b3) => a3 + b3, 0), 0);
+        notify(`${file.name}: ${views.length ? `${created.length} floor view(s)${skipped ? ` (${skipped} without fixtures left out)` : ''}, ` : ''}${nFix} fixtures`);
       } catch (e) {
         console.error(e);
         notify(e.message || `Could not read ${file.name}`, 'bad');
       }
     }
     setBusy('');
+  };
+
+  /** Rebuild a file's network after its layers / the symbol dictionary / size basis changed. */
+  const rebuildFile = (fileId, dd = d) => {
+    const fe = FILES.get(fileId);
+    if (!fe) return;
+    buildFile(fe, dd);
+    const updates = {};
+    for (const p of dd.plans.filter((x) => x.fileId === fileId)) {
+      const entry = CACHE.get(p.id);
+      if (!entry) continue;
+      Object.assign(entry, { net: fe.net, nodes: viewNodes(fe, p.viewTitle), src: undefined, target: undefined });
+      updates[p.id] = analysePlan(entry, dd, flowLps, {}, p);
+    }
+    set((x) => ({ plans: x.plans.map((p) => (updates[p.id] ? { ...p, summary: updates[p.id] } : p)) }));
+    force((n) => n + 1);
   };
 
   const reanalyse = (planId, override) => {
@@ -185,7 +240,7 @@ export function DrawingTab() {
     window.scrollTo({ top: 0 });
   };
 
-  const askPlan = d.plans.find((p) => p.id === ask);
+  const askPlan = d.plans.find((p) => p.id === ask[0]);
   const viewPlan = d.plans.find((p) => p.id === view);
 
   return (
@@ -295,11 +350,14 @@ export function DrawingTab() {
                 <div key={p.id} className="rounded-xl border border-line bg-ink-950/40 p-3">
                   <div className="flex flex-wrap items-center gap-2">
                     <input className="field min-w-[180px] flex-1 !py-1 text-sm font-semibold" value={p.name} onChange={(e) => updPlan(p.id, { name: e.target.value })} aria-label="Plan name" />
-                    <button className="btn-ghost !py-1 text-xs" onClick={() => setAsk(p.id)}>
+                    <button className="btn-ghost !py-1 text-xs" onClick={() => setAsk([p.id])}>
                       <Layers size={13} /> {p.levels?.length ? `${p.levels.length} floor(s)` : `${p.floors || 1} floor(s)`}
                     </button>
                     <button className="btn-ghost !py-1 text-xs" onClick={() => (CACHE.has(p.id) ? setView(p.id) : notify('Upload the drawing again to open it (drawings are kept only while the page is open).', 'bad'))}>
                       <Eye size={13} /> Route
+                    </button>
+                    <button className="btn-ghost !py-1 text-xs" onClick={() => (FILES.has(p.fileId) ? setSettingsFor(p.fileId) : notify('Upload the drawing again to change its layers / symbols.', 'bad'))}>
+                      <Settings2 size={13} /> Layers & symbols
                     </button>
                     <button className="btn-ghost !p-1 hover:!text-red-400" onClick={() => removePlan(p.id)} aria-label="Remove plan">
                       <Trash2 size={14} />
@@ -394,14 +452,35 @@ export function DrawingTab() {
         )}
       </Card>
 
-      {askPlan && <FloorsDialog plan={askPlan} levels={d.levels} onClose={() => setAsk(null)} onSave={(patch) => (updPlan(askPlan.id, patch), setAsk(null))} />}
+      {askPlan && <FloorsDialog key={askPlan.id} plan={askPlan} levels={d.levels} pending={ask.length} onClose={() => setAsk((q) => q.slice(1))} onSave={(patch) => (updPlan(askPlan.id, patch), setAsk((q) => q.slice(1)))} />}
+      {settingsFor && FILES.get(settingsFor) && (
+        <DrawingSettings
+          file={FILES.get(settingsFor)}
+          d={d}
+          onClose={() => setSettingsFor(null)}
+          onLayers={(layers) => {
+            FILES.get(settingsFor).layers = layers;
+            rebuildFile(settingsFor);
+          }}
+          onSymbol={(key, kind) => {
+            const dd = { ...d, symbols: { ...(d.symbols || {}), [key]: kind } };
+            set({ symbols: dd.symbols });
+            for (const fid of new Set(d.plans.map((p) => p.fileId).filter((x) => FILES.has(x)))) rebuildFile(fid, dd);
+          }}
+          onSizeBasis={(v) => {
+            const dd = { ...d, sizeBasis: v };
+            set({ sizeBasis: v });
+            for (const fid of new Set(d.plans.map((p) => p.fileId).filter((x) => FILES.has(x)))) rebuildFile(fid, dd);
+          }}
+        />
+      )}
       {viewPlan && CACHE.get(viewPlan.id) && <RouteViewer plan={viewPlan} entry={CACHE.get(viewPlan.id)} onClose={() => setView(null)} onPick={(o) => reanalyse(viewPlan.id, o)} onAssign={(fid, kind) => updPlan(viewPlan.id, { assign: { ...(viewPlan.assign || {}), [fid]: kind } })} />}
     </div>
   );
 }
 
 /* ------------------------------------------------------------------ */
-function FloorsDialog({ plan, levels, onClose, onSave }) {
+function FloorsDialog({ plan, levels, pending = 1, onClose, onSave }) {
   const [sel, setSel] = useState(plan.levels || []);
   const [floors, setFloors] = useState(plan.floors || 1);
   return (
@@ -410,7 +489,10 @@ function FloorsDialog({ plan, levels, onClose, onSave }) {
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="font-display text-lg font-bold text-slate-50">Which floors does this plan cover?</h2>
-            <p className="text-xs text-slate-400">{plan.name}</p>
+            <p className="text-xs text-slate-400">
+              {plan.name}
+              {pending > 1 ? ` · ${pending - 1} more view(s) after this` : ''}
+            </p>
           </div>
           <button className="btn-ghost !p-1" onClick={onClose} aria-label="Close">
             <X size={18} />
@@ -444,13 +526,26 @@ function FloorsDialog({ plan, levels, onClose, onSave }) {
   );
 }
 
+function viewBounds(entry) {
+  if (!entry.nodes?.size) return netBounds(entry.net);
+  let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+  for (const id of entry.nodes) {
+    const g = entry.net.nodes[id];
+    if (!g) continue;
+    minx = Math.min(minx, g.x); maxx = Math.max(maxx, g.x); miny = Math.min(miny, g.y); maxy = Math.max(maxy, g.y);
+  }
+  const pad = Math.max(1500, 0.08 * Math.max(maxx - minx, maxy - miny));
+  return { minx: minx - pad, miny: miny - pad, maxx: maxx + pad, maxy: maxy + pad };
+}
+
 /* ------------------------------------------------------------------ */
 function RouteViewer({ plan, entry, onClose, onPick, onAssign }) {
   const [markKind, setMarkKind] = useState(FIXTURES[0].name);
   const canvasRef = useRef(null);
   const wrapRef = useRef(null);
   const [mode, setMode] = useState(null); // 'src' | 'target'
-  const [vb, setVb] = useState(() => netBounds(entry.net));
+  const fit = () => viewBounds(entry);
+  const [vb, setVb] = useState(fit);
   const drag = useRef(null);
   const geo = useRef(null);
   const { theme } = useStore();
@@ -558,10 +653,10 @@ function RouteViewer({ plan, entry, onClose, onPick, onAssign }) {
               </select>
             )}
           </span>
-          <button className="btn-ghost !py-1 text-xs" onClick={() => onPick({ src: autoSource(entry.net), target: null })}>
+          <button className="btn-ghost !py-1 text-xs" onClick={() => onPick({ src: autoSource(entry.net, entry.nodes), target: null })}>
             <Wand2 size={14} /> Auto
           </button>
-          <button className="btn-ghost !py-1 text-xs" onClick={() => setVb(netBounds(entry.net))}>
+          <button className="btn-ghost !py-1 text-xs" onClick={() => setVb(fit())}>
             <ZoomIn size={14} /> Fit
           </button>
           <button className="btn-ghost !p-1" onClick={onClose} aria-label="Close">
@@ -635,4 +730,166 @@ function CountsEditor({ plan, onChange }) {
       )}
     </div>
   );
+}
+
+/* ------------------------------------------------------------------ */
+/** Teach the reader a drafting standard: which layers are pipes, what each symbol is, how sizes are written. */
+function DrawingSettings({ file, d, onClose, onLayers, onSymbol, onSizeBasis }) {
+  const { flat, net } = file;
+  const k = flat.unitToMm || 1;
+  const [layers, setLayers] = useState(file.layers);
+  const [q, setQ] = useState('');
+  const symbols = { ...DEFAULT_SYMBOLS, ...(d.symbols || {}) };
+  const layerList = useMemo(() => {
+    const c = {};
+    for (const l of flat.lines) c[l.layer] = (c[l.layer] || 0) + 1;
+    return Object.entries(c)
+      .map(([name, n]) => ({ name, n }))
+      .sort((a, b) => (file.layers.includes(b.name) ? 1 : 0) - (file.layers.includes(a.name) ? 1 : 0) || b.n - a.n);
+  }, [flat, file.layers]);
+  // symbols that sit on / near the pipe network
+  const symList = useMemo(() => {
+    const grid = new Map();
+    const cell = 1500;
+    for (const g of net.nodes) {
+      const key = `${Math.floor(g.x / cell)},${Math.floor(g.y / cell)}`;
+      grid.set(key, true);
+    }
+    const near = (b) => {
+      const cx = Math.floor((b.x * k) / cell);
+      const cy = Math.floor((b.y * k) / cell);
+      for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) if (grid.has(`${cx + i},${cy + j}`)) return true;
+      return false;
+    };
+    const by = new Map();
+    for (const b of flat.blocks) {
+      if (b.preset || !near(b)) continue;
+      const key = symbolKey(b.name);
+      if (!key) continue;
+      const e = by.get(key) || { key, n: 0, sample: b, layer: b.layer };
+      e.n++;
+      by.set(key, e);
+    }
+    return [...by.values()].sort((a, b) => b.n - a.n).slice(0, 80);
+  }, [flat, net, k]);
+  const options = [
+    ['', '— automatic (by name) —'],
+    ...FIXTURES.filter((f) => f.name !== 'Custom fixture').map((f) => [f.name, `Fixture: ${f.name}`]),
+    ...FITTING_KINDS.map((f) => [f, `Valve / fitting: ${f}`]),
+    ['equipment', 'Equipment (tank, heater, pump)'],
+    ['ignore', 'Ignore'],
+  ];
+  const shown = symList.filter((s2) => !q || s2.key.includes(q.toLowerCase()));
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-2 sm:p-4" role="dialog" aria-modal="true">
+      <div className="flex max-h-full w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-line bg-ink-900 shadow-2xl">
+        <div className="flex items-center gap-2 border-b border-line p-3">
+          <Settings2 size={18} className="text-brand-400" />
+          <div className="mr-auto">
+            <div className="font-display font-bold text-slate-50">Layers & symbols</div>
+            <div className="text-[11px] text-slate-400">Teach the reader this drafting standard once – symbol choices are remembered for every drawing.</div>
+          </div>
+          <button className="btn-ghost !p-1" onClick={onClose} aria-label="Close">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="grid min-h-0 flex-1 gap-0 overflow-hidden md:grid-cols-[320px_1fr]">
+          <div className="min-h-0 overflow-auto border-b border-line p-3 md:border-b-0 md:border-r">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Pipe layers</div>
+            <label className="mb-3 block text-xs text-slate-300">
+              Sizes written on the drawing are
+              <select className="field mt-1 !py-1 text-xs" value={d.sizeBasis || 'od'} onChange={(e) => onSizeBasis(e.target.value)}>
+                <option value="od">PPR outside diameter (Ø20, Ø25, Ø32 …)</option>
+                <option value="dn">Nominal bore DN (Ø15 = ½″, Ø25 = 1″ → PPR one size up)</option>
+              </select>
+            </label>
+            <div className="space-y-0.5">
+              {layerList.slice(0, 120).map((l) => (
+                <label key={l.name} className="flex items-center gap-2 text-[11px] text-slate-300">
+                  <input type="checkbox" className="accent-brand-500" checked={layers.includes(l.name)} onChange={(e) => setLayers((x) => (e.target.checked ? [...x, l.name] : x.filter((y) => y !== l.name)))} />
+                  <span className="truncate" title={l.name}>
+                    {l.name}
+                  </span>
+                  <span className="ml-auto text-slate-500">{l.n}</span>
+                </label>
+              ))}
+            </div>
+            <button className="btn-primary mt-3 w-full !py-1.5 text-xs" onClick={() => onLayers(layers)}>
+              Apply layers & re-trace
+            </button>
+          </div>
+          <div className="min-h-0 overflow-auto p-3">
+            <div className="mb-2 flex items-center gap-2">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Symbols near the pipes ({symList.length})</div>
+              <input className="field ml-auto !w-40 !py-0.5 text-xs" placeholder="Filter…" value={q} onChange={(e) => setQ(e.target.value)} />
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {shown.map((s2) => {
+                const auto = classifyBlock({ ...s2.sample, name: s2.sample.name }, null);
+                return (
+                  <div key={s2.key} className="flex items-center gap-2 rounded-xl border border-line p-2">
+                    <SymbolThumb flat={flat} block={s2.sample} />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-xs font-semibold text-slate-100" title={s2.sample.name}>
+                        {s2.key} <span className="font-normal text-slate-500">× {s2.n}</span>
+                      </div>
+                      <div className="truncate text-[10px] text-slate-500">
+                        layer {s2.layer.split('$0$').pop()} · auto: {auto.cls === 'other' ? 'not used' : `${auto.cls} ${auto.kind}`}
+                      </div>
+                      <select className="field mt-1 !py-0.5 text-[11px]" value={symbols[s2.key] || ''} onChange={(e) => onSymbol(s2.key, e.target.value || undefined)}>
+                        {options.map(([v, l]) => (
+                          <option key={v} value={v}>
+                            {l}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SymbolThumb({ flat, block }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const c = ref.current;
+    const g = c.getContext('2d');
+    const w = 56;
+    c.width = w * 2;
+    c.height = w * 2;
+    g.scale(2, 2);
+    g.fillStyle = '#fff';
+    g.fillRect(0, 0, w, w);
+    const pad = Math.max(block.maxx - block.minx, block.maxy - block.miny) * 0.25 || 0.1;
+    const minx = block.minx - pad, miny = block.miny - pad, maxx = block.maxx + pad, maxy = block.maxy + pad;
+    const s = Math.min(w / (maxx - minx || 1), w / (maxy - miny || 1));
+    const X = (x) => (x - minx) * s + (w - (maxx - minx) * s) / 2;
+    const Y = (y) => w - ((y - miny) * s + (w - (maxy - miny) * s) / 2);
+    g.lineWidth = 1;
+    g.beginPath();
+    let n = 0;
+    for (const l of flat.lines) {
+      if (Math.max(l.a.x, l.b.x) < minx || Math.min(l.a.x, l.b.x) > maxx || Math.max(l.a.y, l.b.y) < miny || Math.min(l.a.y, l.b.y) > maxy) continue;
+      g.strokeStyle = l.owner === block.id ? '#be123c' : '#cbd5e1';
+      g.moveTo(X(l.a.x), Y(l.a.y));
+      g.lineTo(X(l.b.x), Y(l.b.y));
+      if (++n > 3000) break;
+    }
+    g.stroke();
+    g.beginPath();
+    g.strokeStyle = '#be123c';
+    for (const l of flat.lines) {
+      if (l.owner !== block.id) continue;
+      g.moveTo(X(l.a.x), Y(l.a.y));
+      g.lineTo(X(l.b.x), Y(l.b.y));
+    }
+    g.stroke();
+  }, [flat, block]);
+  return <canvas ref={ref} className="h-14 w-14 shrink-0 rounded border border-line" />;
 }
