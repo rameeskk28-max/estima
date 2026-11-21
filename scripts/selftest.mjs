@@ -310,5 +310,30 @@ import * as pdfjsLegacy from 'pdfjs-dist/legacy/build/pdf.mjs';
   assert(modelFromFileName('40FWS-V-52-037M-G.pdf') === '40FWS-V-52-037M-G' && modelFromFileName('6_LPS_AT_3_BAR.pdf') === '', 'model from file name (duty-style names ignored)');
 }
 
+
+// Quotation reader – Sales quotation format (S.No | Pump Model | Control Panel Includes | Fittings …), synthetic
+import { parseQuote as readQuote } from '../src/lib/quote/parse.js';
+{
+  const it = (str, x, y, page = 1) => ({ page, str, x, y, w: str.length * 3.6, h: 8, pw: 612 });
+  const p1 = [
+    it('BILL TO:', 20, 112), it('Test Contractor LLC', 20, 125), it('SALES QUOTATION', 407, 125),
+    it('Quotation No.', 300, 161), it('GL-TEST-001', 454, 161), it('Date', 300, 171), it('01/01/2026', 455, 171),
+    it('Email', 300, 181), it('sales@example.com', 455, 181), it('SYNTHETIC TOWER', 454, 202), it('Project', 300, 205),
+    it('S.No', 22, 241), it('Pump Model', 77, 241), it('Control Panel Includes', 194, 241), it('Fittings and Acessories', 343, 241), it('Unit Price', 472, 241), it('Qty', 526, 241), it('Total Price', 551, 241),
+    it('Make :Franklin electric', 39, 267), it('BOOSTER PUMP SET', 39, 275), it('Type : Horizontal Multi Stage', 39, 284), it('IP 55 enclosure', 155, 284),
+    it('• SS 304 2x1.5 suction and discharge manifold', 300, 288), it('10TEST-53 E1 IE3,3 KW, 2900 rpm, 3', 39, 293), it('VFD, PLC', 155, 293),
+    it('Phase', 39, 301), it('• 100 Liter pressure Vessel, pressure Switch.', 300, 301), it('1', 27, 306), it('9,000.00', 472, 306), it('2', 530, 306), it('18,000.00', 552, 306),
+    it('Arrangement : 1D+1S', 39, 310), it('Flow :6 L/S', 39, 319), it('Head : 31 Mtr', 39, 327), it('Pump Housing : Stainless Steel 304,', 39, 336), it('Impeller : Stainless Steel 304', 39, 345),
+    it('Notes', 20, 581), it('TOTAL AED', 513, 581), it('5', 33, 671), it('Warranty:', 39, 671), it('2 years from date of supply', 155, 671), it('Authorized By', 39, 720), it('Test Engineer', 39, 730),
+  ];
+  const q = readQuote([p1]);
+  const a = q.items[0] || {};
+  assert(
+    q.header.quoteNo === 'GL-TEST-001' && q.header.project === 'SYNTHETIC TOWER' && q.header.customer === 'Test Contractor LLC' && q.header.warranty === '2 years from date of supply' &&
+      q.items.length === 1 && a.model === '10TEST-53 E1 IE3' && a.kw === 3 && a.flowLps === 6 && a.headM === 31 && a.arrangement === '1D+1S' && a.qty === 2 && a.vfd && a.vessel === '100' && a.header === '2"x1.5"' && a.template === 'booster-vfd',
+    `sales-format quotation read: ${a.model}, ${a.kw} kW, ${a.flowLps} L/s @ ${a.headM} m, qty ${a.qty}, ${a.template}`,
+  );
+}
+
 if (failures) { console.error(`${failures} failure(s)`); process.exit(1); }
 console.log('All self-tests passed.');

@@ -1,4 +1,7 @@
-// Reader for Greenland ERP quotations (Aspose-generated PDFs).
+// Reader for Greenland quotations – two formats:
+//  1. ERP quotation (Aspose PDF, "Q2600…"): NO. | PRODUCT DESCRIPTION | QTY | UOM | UNIT PRICE | TOTAL PRICE
+//  2. Sales quotation (Excel → PDF, "GL-FE-26-…"): S.No | Pump Model | Control Panel Includes |
+//     Fittings and Acessories | Unit Price | Qty | Total Price, header "Quotation No. / Date / Email / Project", "BILL TO:"
 // Input: text items with positions from pdf.js; output: header fields + pump line items.
 
 /**
@@ -119,7 +122,10 @@ export function parseQuote(rawPages) {
   const pages = stripFooter(rawPages);
   const all = pages.flat();
   const hdr = all.find((it) => /PRODUCT DESCRIPTION/i.test(it.str));
-  if (!hdr) throw new Error('This does not look like a Greenland quotation (no “PRODUCT DESCRIPTION” column found).');
+  if (!hdr) {
+    if (all.some((it) => /^Pump Model$/i.test(it.str.trim())) && all.some((it) => /Control Panel/i.test(it.str))) return parseSalesQuote(rawPages);
+    throw new Error('This does not look like a Greenland quotation (no “PRODUCT DESCRIPTION” or “Pump Model” column found).');
+  }
   const qtyH = all.find((it) => it.page === hdr.page && /^QTY$/i.test(it.str.trim()));
   const noH = all.find((it) => it.page === hdr.page && /^NO\.?$/i.test(it.str.trim()) && Math.abs(it.y - hdr.y) < 4);
   const descX0 = (noH ? noH.x + noH.w : hdr.x - 60) + 8;
@@ -291,4 +297,157 @@ function parseWarranty(pages) {
   const i = lines.findIndex((l) => /^WARRANTY\s*:?/i.test(l) || /\bWARRANTY\s*:/i.test(l));
   const near = lines.slice(Math.max(0, i - 2), i + 3).filter((l) => /MONTH|YEAR/i.test(l));
   return near.join(' ').replace(/^.*?WARRANTY\s*:\s*/i, '').replace(/\s+/g, ' ').trim();
+}
+
+/* ------------------------------------------------------------------ */
+/* Format 2 – Sales quotation (S.No | Pump Model | Control Panel …)    */
+/* ------------------------------------------------------------------ */
+const SALES_FOOTER = /HE\s*AD\s*O\s*F\s*F\s*I\s*CE|P\.O\.Box|info@greenland/i;
+const SALES_LABEL = /^(Make|Type|Arrangement|Flow|Head|Pump Housing|Impeller|Shaft)\s*:/i;
+const centre = (it) => it.x + it.w / 2;
+
+export function parseSalesQuote(rawPages) {
+  const pages = rawPages.map((items) => {
+    const f = items.filter((it) => SALES_FOOTER.test(it.str));
+    const fy = f.length ? Math.min(...f.map((it) => it.y)) : Infinity;
+    return items.filter((it) => it.y < fy - 3);
+  });
+  const all = pages.flat();
+  const H = (re, page) => all.find((it) => (!page || it.page === page) && re.test(it.str.trim()));
+  const modelH = H(/^Pump Model$/i);
+  const p0 = modelH.page;
+  const snH = H(/^S\.?\s*No\.?$/i, p0);
+  const ctrlH = H(/Control Panel/i, p0);
+  const fitH = H(/^Fittings/i, p0);
+  const unitH = H(/^Unit Price$/i, p0);
+  const qtyH = H(/^Qty$/i, p0);
+  const totH = H(/^Total Price$/i, p0);
+
+  // header (first page, above the table)
+  const top = pages[p0 - 1].filter((it) => it.y < modelH.y - 4);
+  const labelRow = (re) => top.find((it) => re.test(it.str.trim()));
+  const valueNear = (lab, span = 6) => {
+    if (!lab) return '';
+    if (span < 6) return join(top.filter((it) => it.x > lab.x + lab.w + 20 && Math.abs(it.y - lab.y) <= span).sort((p, q) => p.x - q.x)); // one row
+    const others = top.filter((it) => it.x <= lab.x + 2 && it !== lab && it.x >= lab.x - 2 && it.y > lab.y + 2).map((it) => it.y);
+    const nextY = others.length ? Math.min(...others) : lab.y + 40;
+    const vals = top.filter((it) => it.x > lab.x + lab.w + 20 && it.y > lab.y - span && it.y < nextY - 2);
+    return toLines(vals).map((l) => join(l.items)).join(' ').replace(/\s+/g, ' ').trim();
+  };
+  const qn = labelRow(/^Quotation No\.?$/i);
+  const billTo = labelRow(/^BILL TO:?$/i);
+  const rightX = qn ? qn.x - 10 : 290;
+  const customer = billTo
+    ? toLines(top.filter((it) => it.y > billTo.y + 2 && it.x < rightX && !/SALES QUOTATION/i.test(it.str) && it.y < (qn ? qn.y : billTo.y + 40)))
+        .map((l) => join(l.items.filter((it) => it.x < rightX)))
+        .filter(Boolean)
+        .join(' ')
+    : '';
+
+  // columns: each column starts at the leftmost body text between the previous heading centre and its own centre
+  const body = (it) => it.y > modelH.y + 4 || it.page !== p0;
+  const colStart = (prevH, h) => {
+    const xs = all.filter((it) => body(it) && it.x > centre(prevH) && it.x <= centre(h) + 2).map((it) => it.x);
+    return xs.length ? Math.min(...xs) : h.x;
+  };
+  const xModel = snH ? colStart(snH, modelH) : modelH.x - 40;
+  const xCtrl = colStart(modelH, ctrlH);
+  const xFit = colStart(ctrlH, fitH);
+  const xPrice = unitH.x - 6;
+
+  // body lines until the totals / notes
+  const rows = [];
+  let ended = false;
+  for (const items of pages) {
+    if (ended) break;
+    const p = items[0]?.page;
+    if (p < p0) continue;
+    const hy = all.find((it) => it.page === p && /^Pump Model$/i.test(it.str.trim()))?.y ?? 0;
+    for (const ln of toLines(items.filter((it) => it.y > hy + 4))) {
+      const text = join(ln.items);
+      if (/^Notes\b|TOTAL AED|TOTAL DISCOUNT|Terms & Conditions/i.test(text)) {
+        ended = true;
+        break;
+      }
+      const pick = (x0, x1) => join(ln.items.filter((it) => it.x >= x0 - 2 && it.x < x1 - 2));
+      const no = ln.items.find((it) => it.x < xModel - 2 && /^\d{1,3}$/.test(it.str.trim()));
+      const num = (h) => {
+        const it = h && ln.items.find((x) => x.x >= xPrice && Math.abs(centre(x) - centre(h)) < Math.max(18, h.w));
+        return it && /^[\d,.]+$/.test(it.str.trim()) ? Number(it.str.replace(/,/g, '')) : null;
+      };
+      rows.push({ page: p, y: ln.y, no: no ? Number(no.str) : null, model: pick(xModel, xCtrl), ctrl: pick(xCtrl, xFit), fit: pick(xFit, xPrice), qty: num(qtyH), unit: num(unitH), total: num(totH) });
+    }
+  }
+
+  // items start at each "Make :" line of the Pump Model column
+  const starts = rows.map((r, k) => (/^Make\s*:/i.test(r.model) ? k : -1)).filter((k) => k >= 0);
+  const blocks = starts.map((s, n) => rows.slice(s, n < starts.length - 1 ? starts[n + 1] : rows.length));
+
+  const items = blocks.map((b, k) => {
+    const model = b.map((r) => r.model).filter(Boolean);
+    const ctrl = b.map((r) => r.ctrl).filter(Boolean);
+    const fit = b.map((r) => r.fit).filter(Boolean).join(' ');
+    const numRow = b.find((r) => r.no != null);
+    const qtyRow = b.find((r) => r.qty != null);
+
+    // Pump Model column: Make, title line(s), model spec (has kW, may wrap), labelled fields
+    const make = model[0].replace(/^Make\s*:\s*/i, '').trim();
+    const titleL = [];
+    const specL = [];
+    const fields = {};
+    let mode = 'title';
+    let last = null;
+    for (const l of model.slice(1)) {
+      const m = l.match(SALES_LABEL);
+      if (m) {
+        last = m[1].toLowerCase();
+        fields[last] = l.replace(SALES_LABEL, '').trim();
+        if (mode === 'spec') mode = 'done';
+        continue;
+      }
+      if (mode !== 'done' && /\d\s*KW\b|rpm|Phase/i.test(l)) mode = 'spec';
+      if (mode === 'spec') specL.push(l);
+      else if (mode === 'title' && !last) titleL.push(l);
+      else if (last) fields[last] = `${fields[last]} ${l}`.trim(); // wrapped field value
+    }
+    const strip = (v) => String(v || '').replace(/,\s*$/, '').trim();
+    // same line structure as the ERP format, so one item reader serves both
+    const lines = [
+      `Make : ${make} ${specL.join(' ')}`.replace(/\s+/g, ' ').replace(/\s+,/g, ','),
+      `Type : ${strip(fields.type)}`,
+      `Arrangement : ${strip(fields.arrangement)}`,
+      `Flow :${strip(fields.flow)}${fields.head ? `, Head : ${strip(fields.head)}` : ''}`,
+      `Pump Housing : ${strip(fields['pump housing'])}`,
+      `Impeller : ${strip(fields.impeller)}`,
+      ...(fields.shaft ? [`Shaft : ${strip(fields.shaft)}`] : []),
+      ...(ctrl.length ? [`ELECTRICAL ACCESSORIES: ${ctrl[0]}`, ...ctrl.slice(1)] : []),
+      ...(fit ? [`MECHANICAL ACCESORIES: ${fit}`] : []),
+    ];
+    const it = parseItem(titleL.join(' '), lines);
+    return { ...it, no: numRow?.no ?? k + 1, qty: qtyRow?.qty ?? 1, unitPrice: qtyRow?.unit ?? null, totalPrice: qtyRow?.total ?? null };
+  });
+
+  // terms ("Price Validity:", "Delivery:", "Payment Terms:", "Warranty:") and signatory
+  const lines = pages.flatMap((p) => toLines(p).map((l) => join(l.items)));
+  const term = (re) => (lines.find((l) => re.test(l)) || '').replace(/^\d+\s*/, '').replace(re, '').trim();
+  const authIdx = lines.findIndex((l) => /^Authori[sz]ed By/i.test(l));
+  const header = {
+    quoteNo: valueNear(qn, 3),
+    quoteDate: valueNear(labelRow(/^Date$/i), 3),
+    validity: term(/^\d*\s*Price Validity\s*:/i),
+    customer,
+    customerCode: '',
+    customerEmail: '',
+    customerTel: '',
+    contact: customer,
+    salesperson: authIdx >= 0 ? lines[authIdx + 1] || '' : '',
+    salesEmail: valueNear(labelRow(/^Email$/i), 3),
+    salesContact: (lines.find((l) => /^\+?9715\d{7,8}$|^\+?971\s?5\d/.test(l.replace(/\s/g, ''))) || '').trim(),
+    leadTime: term(/^\d*\s*Delivery\s*:/i),
+    payment: term(/^\d*\s*Payment Terms\s*:/i),
+    project: valueNear(labelRow(/^Project$/i), 10),
+    format: 'sales',
+  };
+  header.warranty = term(/^\d*\s*Warranty\s*:/i) || parseWarranty(pages, header);
+  return { header, items };
 }

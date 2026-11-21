@@ -70,11 +70,11 @@ export function QuoteGenerator({ go }) {
           eff: '',
           certs: S.certs?.[it.template] ?? '',
           motorClass: S.motorClass || '',
-          starter: it.vfd ? 'VFD' : 'DOL',
+          starter: it.vfd ? 'VFD' : (it.electrical || []).some((e) => /^SD$|star[\s-]*delta/i.test(e.trim())) ? 'Star-Delta' : 'DOL',
           dutyId: autoDuty(duties, it),
         })),
         form: {
-          projectName: '',
+          projectName: q.header.project || '',
           client: '',
           consultant: '',
           contractor: q.header.customer,
@@ -135,7 +135,7 @@ export function QuoteGenerator({ go }) {
             <FileInput className="text-brand-400" size={22} /> Quote → Submittal
           </h1>
           <p className="mt-1 max-w-3xl text-sm text-slate-400">
-            Upload a Greenland quotation PDF. The pump items are read automatically, matched with your Document Library (company documents, datasheets, drawings) and turned into the pump schedule, technical literature and the full submittal index.
+            Upload a Greenland quotation PDF – ERP quotation (Q26…) or Sales Quotation (GL-FE-…) format. The pump items are read automatically, matched with your Document Library (company documents, datasheets, drawings) and turned into the pump schedule, technical literature and the full submittal index.
           </p>
         </div>
       </div>

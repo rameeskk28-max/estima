@@ -46,7 +46,7 @@ One page map in `src/nav.js` (`NAV` groups in workflow order: Design → Submitt
 | Technical literature (transfer, booster ± VFD, circulation, sump) | `src/lib/literature.js`, `src/lib/pdf/literaturePdf.js`, `src/modules/literature/LiteratureTab.jsx` |
 | Submittal compile (cover, TOC, dividers, merge, footers) | `src/lib/pdf/compile.js` (`buildPlan`, `compileSubmittal`), `src/modules/submittal/SubmittalBuilder.jsx` |
 | Final PDF compression (metadata strip, dedupe, image re-encode) | `src/lib/pdf/compress.js` |
-| Quote → submittal (rule-based quote reader, generator, warranty, document library UI) | `src/lib/quote/parse.js`, `src/lib/quote/generate.js`, `src/modules/quote/QuoteTab.jsx` |
+| Quote → submittal (rule-based quote reader for 2 formats: ERP quotation "PRODUCT DESCRIPTION" and Sales Quotation "S.No / Pump Model / Control Panel Includes / Fittings" → `parseSalesQuote`; generator, warranty, document library UI) | `src/lib/quote/parse.js`, `src/lib/quote/generate.js`, `src/modules/quote/QuoteTab.jsx` |
 | Technical compliance statement (spec → clause rows, GL TCS layout) | `src/lib/compliance/{spec,readSpec,compliancePdf}.js`, `src/modules/quote/ComplianceTab.jsx` |
 | Consultant comment replies (4 columns + annexures, stamp) | `src/lib/replies.js`, `src/lib/pdf/replyPdf.js`, `src/modules/replies/RepliesTab.jsx` |
 | Calculation from drawing (DWG → network → critical route → calculator) | `src/lib/drawing/{flatten,network,ppr,building,draw,readDwg,readPdf}.js`, `src/modules/drawing/DrawingTab.jsx` (route `#/calc/drawing`) |
@@ -114,3 +114,4 @@ floor · Review: editable calculator inputs in `drawing.review`, Save to Submitt
 tank/pit notes via `findTanks`, main via `mainRoute`, plan route optional) → Order Processing folder → datasheet reader (`src/lib/datasheet.js`, Spaix layout: Pump type, MOTOR, Rated power, Electric
 current; no item code on Spaix sheets) filling costing + item-code rows.
 → report typography overhaul (Times, larger type scale, 14 mm margins; cover/contents unchanged).
+→ link preview (Open Graph tags + `public/og-image.jpg`) → second quotation format (Sales Quotation, GL-FE-…) in the quote reader.
