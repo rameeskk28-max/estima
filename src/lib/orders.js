@@ -119,13 +119,16 @@ export function costingSheet(o) {
           { c: ['', 'TOTAL', '', money(sm.pump), '', money(sm.vfd), '', money(sm.vessel), money(sm.pump + sm.vfd + sm.vessel)], bold: true },
         ],
         legend: ['Costs per unit; Total = (pump + VFD + pressure vessel) × qty. Pump cost includes duty.'],
+        size: 9.4,
+        dense: false,
+        pad: 5,
       },
       {
         type: 'grid',
         title: `2. COST SUMMARY (${cur})`,
         columns: [
-          { label: 'Cost Component', w: 0.6 },
-          { label: String(project).toUpperCase(), w: 0.4, align: 'r' },
+          { label: 'Cost Component', w: 0.62 },
+          { label: `${String(project).toUpperCase()} (${cur})`, w: 0.38, align: 'r' },
         ],
         rows: [
           { c: ['Pump Cost (incl. duty)', money(sm.pump)] },
@@ -139,6 +142,16 @@ export function costingSheet(o) {
           { c: ['Net Margin % (on cost)', pct(sm.markup)], bold: true, tone: { col: 1, color: sm.margin < 0 ? 'red' : 'green' } },
         ],
         legend: ['Net cost = pump + VFD + pressure vessel + control panel + assembly. Net margin = quoted value − net cost. Net margin % = net margin ÷ net cost × 100.'],
+        size: 10.5,
+        pad: 6,
+      },
+      {
+        type: 'result',
+        size: 12,
+        tone: sm.margin < 0 ? 'red' : 'green',
+        text: sm.quoted
+          ? `Net margin: ${cur} ${money(sm.margin)}  (${pct(sm.markup)} on cost)   |   Net cost ${cur} ${money(sm.net)}   |   Quoted ${cur} ${money(sm.quoted)}`
+          : `Net cost: ${cur} ${money(sm.net)}  –  enter the quoted value to see the margin`,
       },
     ],
   };

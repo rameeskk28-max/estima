@@ -72,11 +72,12 @@ export async function renderCalcSheet(doc, fonts, sheet, project = {}, logoImg =
   const table = (sec) => {
     const t = sectionTable(sec, project);
     const widths = t.columns.map((c) => c.w * W);
-    const dense = t.columns.length > 8;
-    const size = dense ? TYPE.tableDense : TYPE.table;
+    // per-section overrides: sec.size (pt), sec.dense, sec.pad
+    const dense = sec.dense ?? t.columns.length > 8;
+    const size = sec.size || (dense ? TYPE.tableDense : TYPE.table);
     const lh = size * 1.22;
-    const pad = dense ? 3.4 : 4;
-    const hs = dense ? size - 0.3 : TYPE.head;
+    const pad = sec.pad || (dense ? 3.4 : 4);
+    const hs = sec.size ? sec.size - 0.3 : dense ? size - 0.3 : TYPE.head;
     const drawHead = () => {
       if (t.noHead) return;
       const fits = t.columns.map((c, k) => fitWrap(fonts.bold, c.label, hs, widths[k] - pad * 2));
@@ -148,12 +149,15 @@ export async function renderCalcSheet(doc, fonts, sheet, project = {}, logoImg =
   };
 
   const resultLine = (sec) => {
-    const lines = wrap(fonts.bold, sec.text, 10.5, W - 26);
-    const h = lines.length * 13.5 + 12;
+    const fs = sec.size || 10.5;
+    const lg = fs * 1.3;
+    const red = sec.tone === 'red';
+    const lines = wrap(fonts.bold, sec.text, fs, W - 26);
+    const h = lines.length * lg + 12;
     ensure(h + 6);
-    rect(page, L, y - h, W, h, { fill: C.greenBg, stroke: C.sky, width: 1 });
-    rect(page, L, y - h, 5, h, { fill: C.sky });
-    lines.forEach((ln, i) => drawText(page, ln, { x: L + 14, y: y - 15.5 - i * 13.5, size: 10.5, font: fonts.bold, color: C.navy }));
+    rect(page, L, y - h, W, h, { fill: red ? C.redBg : C.greenBg, stroke: red ? C.red : C.sky, width: 1 });
+    rect(page, L, y - h, 5, h, { fill: red ? C.red : C.sky });
+    lines.forEach((ln, i) => drawText(page, ln, { x: L + 14, y: y - 6 - fs * 0.95 - i * lg, size: fs, font: fonts.bold, color: red ? C.red : C.navy }));
     y -= h + 12;
   };
 
