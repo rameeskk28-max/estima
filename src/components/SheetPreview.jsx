@@ -23,7 +23,7 @@ export function SheetHtml({ sheet, project }) {
           <tr>
             <td rowSpan={3} style={{ width: '36%' }}>
               <img src={logoSrc} alt={project.supplier || 'Supplier'} style={{ height: '8.5mm', maxWidth: '64mm', objectFit: 'contain', display: 'block' }} />
-              <div style={{ fontSize: '6.4pt', fontWeight: 700, color: '#048c3c', marginTop: 2 }}>{sheet.sheetLabel || 'HYDRAULIC CALCULATION SHEET'}</div>
+              <div style={{ fontSize: '7.8pt', fontWeight: 700, color: '#048c3c', marginTop: 2 }}>{sheet.sheetLabel || 'HYDRAULIC CALCULATION SHEET'}</div>
             </td>
             <HdrCell k="Project" v={project.projectName} />
             <HdrCell k="Ref No." v={sheet.ref || project.refNo} />
@@ -38,12 +38,12 @@ export function SheetHtml({ sheet, project }) {
           </tr>
         </tbody>
       </table>
-      <div style={{ background: '#06af4b', color: '#fff', textAlign: 'center', fontWeight: 700, fontSize: '10pt', padding: '4pt', marginBottom: 8 }}>{sheet.docTitle}</div>
+      <div style={{ background: '#06af4b', color: '#fff', textAlign: 'center', fontWeight: 700, fontSize: '12.5pt', padding: '5pt', marginBottom: 10 }}>{sheet.docTitle}</div>
 
       {sheet.sections.map((sec, si) => {
         if (sec.type === 'result')
           return (
-            <div key={si} style={{ background: '#e6f7eb', border: '1pt solid #06af4b', borderLeft: '4pt solid #06af4b', padding: '5pt 8pt', fontWeight: 700, color: '#153963', fontSize: '9pt', margin: '6pt 0' }}>
+            <div key={si} style={{ background: '#e6f7eb', border: '1pt solid #06af4b', borderLeft: '4pt solid #06af4b', padding: '6pt 10pt', fontWeight: 700, color: '#153963', fontSize: '10.5pt', margin: '8pt 0' }}>
               {sec.text}
             </div>
           );
@@ -51,7 +51,7 @@ export function SheetHtml({ sheet, project }) {
           return (
             <div key={si} style={{ marginBottom: 7 }}>
               {sec.title && <div className="sec-title">{sec.title}</div>}
-              <div style={{ whiteSpace: 'pre-line', fontSize: '8.8pt', padding: '4pt 3pt', lineHeight: 1.45 }}>{sec.text}</div>
+              <div style={{ whiteSpace: 'pre-line', fontSize: '9.5pt', padding: '4pt 3pt', lineHeight: 1.45 }}>{sec.text}</div>
             </div>
           );
         if (sec.type === 'image')
@@ -60,13 +60,13 @@ export function SheetHtml({ sheet, project }) {
               {sec.title && <div className="sec-title" style={{ alignSelf: 'stretch' }}>{sec.title}</div>}
               <div style={{ border: '0.5pt solid #bcc9db', width: sec.boxWidth ? `${sec.boxWidth * 100}%` : '100%', height: sec.height ? `${(sec.height / 72) * 25.4}mm` : '60mm', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 6 }}>
                 <img src={sec.src} alt={sec.title || sec.caption || 'image'} style={{ maxHeight: sec.caption ? '82%' : '100%', maxWidth: '100%', objectFit: 'contain' }} />
-                {sec.caption && <div style={{ fontSize: '6.6pt', fontWeight: 700, color: '#617086', marginTop: 2 }}>{sec.caption}</div>}
+                {sec.caption && <div style={{ fontSize: '7.8pt', fontStyle: 'italic', color: '#617086', marginTop: 2 }}>{sec.caption}</div>}
               </div>
             </div>
           ) : null;
         if (sec.type === 'note')
           return (
-            <p key={si} style={{ fontStyle: 'italic', color: '#617086', fontSize: '7.4pt', margin: '4pt 0 8pt' }}>
+            <p key={si} style={{ fontStyle: 'italic', color: '#617086', fontSize: '8.5pt', margin: '4pt 0 8pt' }}>
               {sec.text}
             </p>
           );
@@ -75,7 +75,7 @@ export function SheetHtml({ sheet, project }) {
         return (
           <div key={si} style={{ marginBottom: 7 }}>
             <div className="sec-title">{sec.title}</div>
-            <table className="tbl" style={{ fontSize: dense ? '6.4pt' : '7pt' }}>
+            <table className="tbl" style={{ fontSize: dense ? '8pt' : '8.8pt' }}>
               {!t.noHead && (
                 <thead>
                   <tr>
@@ -111,7 +111,7 @@ export function SheetHtml({ sheet, project }) {
               </tbody>
             </table>
             {sec.legend?.map((l, k) => (
-              <div key={k} style={{ fontStyle: 'italic', color: '#617086', fontSize: '6.4pt', marginTop: k ? 0 : 3 }}>
+              <div key={k} style={{ fontStyle: 'italic', color: '#617086', fontSize: '8.5pt', marginTop: k ? 0 : 3 }}>
                 {l}
               </div>
             ))}
@@ -129,13 +129,13 @@ export function SheetHtml({ sheet, project }) {
               ['APPROVED BY', project.approvedBy],
             ].map(([role, name, date]) => (
               <td key={role} style={{ width: '33.3%' }}>
-                <div style={{ background: '#153963', color: '#fff', textAlign: 'center', fontWeight: 700, fontSize: '7.4pt', padding: '2pt' }}>{role}</div>
+                <div style={{ background: '#153963', color: '#fff', textAlign: 'center', fontWeight: 700, fontSize: '8.5pt', padding: '3pt' }}>{role}</div>
                 {[
                   ['Name', name],
                   ['Signature', ''],
                   ['Date', date ? fmtDate(date) : ''],
                 ].map(([k, v]) => (
-                  <div key={k} style={{ display: 'flex', gap: 6, padding: '6pt 6pt 2pt', fontSize: '7pt' }}>
+                  <div key={k} style={{ display: 'flex', gap: 6, padding: '7pt 7pt 2pt', fontSize: '8.5pt' }}>
                     <span style={{ color: '#617086', width: 42 }}>{k}:</span>
                     <span style={{ flex: 1, borderBottom: '0.5pt solid #bcc9db', fontWeight: 700, minHeight: 10 }}>{v}</span>
                   </div>

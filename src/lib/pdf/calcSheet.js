@@ -1,15 +1,18 @@
 import { PDFDocument, rgb, degrees } from 'pdf-lib';
-import { A4, C, loadFonts, wrap, drawText, rect, hline, vline, clean, fmtDate } from './theme.js';
+import { A4, C, TYPE, loadFonts, wrap, fitWrap, drawText, rect, hline, vline, clean, fmtDate } from './theme.js';
 
 const [PW, PH] = A4;
 const TONES = { green: { fg: C.green, bg: C.greenBg }, amber: { fg: rgb(0.66, 0.38, 0.02), bg: rgb(1, 0.95, 0.85) }, red: { fg: C.red, bg: C.redBg }, blue: { fg: C.navy, bg: C.light } };
-const L = 30;
-const R = PW - 30;
+// A4 with 14 mm side margins (text block 515 pt)
+const L = 40;
+const R = PW - 40;
 const W = R - L;
-const TOP = PH - 26;
-const HEADER_H = 64;
-const CONTENT_TOP = TOP - HEADER_H - 10;
-const CONTENT_BOTTOM = 50;
+const TOP = PH - 30;
+const HEAD_BOX = 48; // logo + project grid
+const TITLE_BAR = 24;
+const HEADER_H = HEAD_BOX + TITLE_BAR;
+const CONTENT_TOP = TOP - HEADER_H - 14;
+const CONTENT_BOTTOM = 62;
 
 /** Replace "@field" placeholders with project header values. */
 export const resolve = (v, project = {}) => (typeof v === 'string' && v.startsWith('@') ? project[v.slice(1)] || '–' : v);
@@ -57,30 +60,34 @@ export async function renderCalcSheet(doc, fonts, sheet, project = {}, logoImg =
   newPage();
 
   const sectionTitle = (title) => {
-    ensure(44);
-    y -= 2;
-    rect(page, L, y - 13.5, W, 13.5, { fill: C.navy });
-    drawText(page, title, { x: L + 6, y: y - 9.8, size: 8, font: fonts.bold, color: C.white, maxWidth: W - 12 });
-    y -= 13.5;
+    ensure(56);
+    y -= 4;
+    const h = 17;
+    rect(page, L, y - h, W, h, { fill: C.navy });
+    rect(page, L, y - h, 4, h, { fill: C.sky });
+    drawText(page, title, { x: L + 11, y: y - 12, size: TYPE.section, font: fonts.bold, color: C.white, maxWidth: W - 20 });
+    y -= h;
   };
 
   const table = (sec) => {
     const t = sectionTable(sec, project);
     const widths = t.columns.map((c) => c.w * W);
     const dense = t.columns.length > 8;
-    const size = dense ? 6.4 : 7;
-    const lh = size * 1.2;
-    const pad = dense ? 2.4 : 2.8;
+    const size = dense ? TYPE.tableDense : TYPE.table;
+    const lh = size * 1.22;
+    const pad = dense ? 3.4 : 4;
+    const hs = dense ? size - 0.3 : TYPE.head;
     const drawHead = () => {
       if (t.noHead) return;
-      const lines = t.columns.map((c, k) => wrap(fonts.bold, c.label, size - 0.2, widths[k] - pad * 2));
+      const fits = t.columns.map((c, k) => fitWrap(fonts.bold, c.label, hs, widths[k] - pad * 2));
+      const lines = fits.map((f) => f.lines);
       const h = Math.max(...lines.map((l) => l.length)) * lh + pad * 2;
       rect(page, L, y - h, W, h, { fill: C.light2 });
       let x = L;
       lines.forEach((ls, k) => {
         ls.forEach((ln, li) => {
           const cx = t.columns[k].align === 'c' ? x + widths[k] / 2 : t.columns[k].align === 'r' ? x + widths[k] - pad : x + pad;
-          drawText(page, ln, { x: cx, y: y - pad - size + 1 - li * lh, size: size - 0.2, font: fonts.bold, color: C.navy, align: t.columns[k].align === 'c' ? 'center' : t.columns[k].align === 'r' ? 'right' : 'left' });
+          drawText(page, ln, { x: cx, y: y - pad - hs + 1.5 - li * lh, size: fits[k].size, font: fonts.bold, color: C.navy, align: t.columns[k].align === 'c' ? 'center' : t.columns[k].align === 'r' ? 'right' : 'left' });
         });
         vline(page, x, y, y - h, C.border, 0.5);
         x += widths[k];
@@ -92,14 +99,16 @@ export async function renderCalcSheet(doc, fonts, sheet, project = {}, logoImg =
     };
     ensure(lh * 3 + pad * 4);
     drawHead();
-    t.rows.forEach((r) => {
+    t.rows.forEach((r, ri) => {
       const toned = (k) => r.tone && r.tone.col === k;
       const fontFor = (k) => (r.bold || (r.keyCol && k === 0) || r.valCol === k || toned(k) ? fonts.bold : r.refCol === k ? fonts.ital : fonts.reg);
-      const cells = r.c.map((cell, k) => wrap(fontFor(k), cell ?? '', size, widths[k] - pad * 2));
-      const h = Math.max(...cells.map((c) => c.length)) * lh + pad * 2 - 1;
+      const fits = r.c.map((cell, k) => fitWrap(fontFor(k), cell ?? '', size, widths[k] - pad * 2));
+      const cells = fits.map((f) => f.lines);
+      const h = Math.max(...cells.map((c) => c.length)) * lh + pad * 2;
       if (ensure(h)) drawHead();
       if (r.bold) rect(page, L, y - h, W, h, { fill: C.greenBg });
       else if (r.keyCol) rect(page, L, y - h, widths[0], h, { fill: C.light });
+      else if (ri % 2) rect(page, L, y - h, W, h, { fill: C.zebra });
       let x = L;
       cells.forEach((lines, k) => {
         const flagged = r.flag === k;
@@ -110,8 +119,8 @@ export async function renderCalcSheet(doc, fonts, sheet, project = {}, logoImg =
           const right = t.columns[k].align === 'r';
           drawText(page, ln, {
             x: center ? x + widths[k] / 2 : right ? x + widths[k] - pad : x + pad,
-            y: y - pad - size + 1 - li * lh,
-            size,
+            y: y - pad - size + 1.5 - li * lh,
+            size: fits[k].size,
             font: fontFor(k),
             color: toned(k) ? TONES[r.tone.color].fg : flagged ? C.red : r.refCol === k ? C.muted : r.valCol === k || r.bold ? C.navy : C.text,
             align: center ? 'center' : right ? 'right' : 'left',
@@ -127,35 +136,35 @@ export async function renderCalcSheet(doc, fonts, sheet, project = {}, logoImg =
     if (sec.legend?.length) {
       y -= 4;
       sec.legend.forEach((ln) => {
-        const lines = wrap(fonts.ital, ln, 6.4, W - 8);
-        ensure(lines.length * 8 + 2);
+        const lines = wrap(fonts.ital, ln, TYPE.note, W - 8);
+        ensure(lines.length * 10.5 + 2);
         lines.forEach((l) => {
-          drawText(page, l, { x: L + 4, y: y - 7, size: 6.4, font: fonts.ital, color: C.muted });
-          y -= 8;
+          drawText(page, l, { x: L + 4, y: y - 8.5, size: TYPE.note, font: fonts.ital, color: C.muted });
+          y -= 10.5;
         });
       });
     }
-    y -= 7;
+    y -= 10;
   };
 
   const resultLine = (sec) => {
-    const lines = wrap(fonts.bold, sec.text, 9, W - 20);
-    const h = lines.length * 12 + 10;
-    ensure(h + 4);
+    const lines = wrap(fonts.bold, sec.text, 10.5, W - 26);
+    const h = lines.length * 13.5 + 12;
+    ensure(h + 6);
     rect(page, L, y - h, W, h, { fill: C.greenBg, stroke: C.sky, width: 1 });
-    rect(page, L, y - h, 4, h, { fill: C.sky });
-    lines.forEach((ln, i) => drawText(page, ln, { x: L + 12, y: y - 13 - i * 12, size: 9, font: fonts.bold, color: C.navy }));
-    y -= h + 8;
+    rect(page, L, y - h, 5, h, { fill: C.sky });
+    lines.forEach((ln, i) => drawText(page, ln, { x: L + 14, y: y - 15.5 - i * 13.5, size: 10.5, font: fonts.bold, color: C.navy }));
+    y -= h + 12;
   };
 
   const note = (sec) => {
-    const lines = wrap(fonts.ital, sec.text, 7.4, W - 8);
-    ensure(lines.length * 9.5 + 4);
+    const lines = wrap(fonts.ital, sec.text, TYPE.note, W - 8);
+    ensure(lines.length * 11 + 4);
     lines.forEach((ln) => {
-      drawText(page, ln, { x: L + 2, y: y - 8, size: 7.4, font: fonts.ital, color: C.muted });
-      y -= 9.5;
+      drawText(page, ln, { x: L + 2, y: y - 9, size: TYPE.note, font: fonts.ital, color: C.muted });
+      y -= 11;
     });
-    y -= 6;
+    y -= 8;
   };
 
   // Plain paragraph(s) – "\n" starts a new line
@@ -165,14 +174,14 @@ export async function renderCalcSheet(doc, fonts, sheet, project = {}, logoImg =
     String(sec.text || '')
       .split('\n')
       .forEach((pl) => {
-        const lines = pl.trim() ? wrap(fonts.reg, pl, 8.8, W - 8) : [''];
+        const lines = pl.trim() ? wrap(fonts.reg, pl, TYPE.body, W - 8) : [''];
         lines.forEach((ln) => {
-          ensure(13);
-          drawText(page, ln, { x: L + 4, y: y - 9, size: 8.8, font: /^AUTHORI[SZ]ED|^For:/i.test(pl.trim()) ? fonts.bold : fonts.reg, color: C.text });
-          y -= 12.5;
+          ensure(14);
+          drawText(page, ln, { x: L + 4, y: y - 10, size: TYPE.body, font: /^AUTHORI[SZ]ED|^For:/i.test(pl.trim()) ? fonts.bold : fonts.reg, color: C.text });
+          y -= 13.5;
         });
       });
-    y -= 8;
+    y -= 10;
   };
 
   // Framed picture (e.g. product photo) – sec.pdfImage is an embedded PDFImage
@@ -185,11 +194,11 @@ export async function renderCalcSheet(doc, fonts, sheet, project = {}, logoImg =
     const bw = sec.boxWidth ? sec.boxWidth * W : W;
     const bx = sec.align === 'right' ? R - bw : L;
     rect(page, bx, y - boxH, bw, boxH, { stroke: C.border, width: 0.5 });
-    if (sec.caption) drawText(page, sec.caption, { x: bx + bw / 2, y: y - boxH + 5, size: 6.6, font: fonts.bold, color: C.muted, align: 'center' });
+    if (sec.caption) drawText(page, sec.caption, { x: bx + bw / 2, y: y - boxH + 6, size: TYPE.small, font: fonts.ital, color: C.muted, align: 'center' });
     const img = sec.pdfImage;
-    const sc = Math.min((bw - 20) / img.width, (boxH - (sec.caption ? 24 : 16)) / img.height);
-    page.drawImage(img, { x: bx + bw / 2 - (img.width * sc) / 2, y: y - boxH / 2 - (img.height * sc) / 2 + (sec.caption ? 5 : 0), width: img.width * sc, height: img.height * sc });
-    y -= boxH + 8;
+    const sc = Math.min((bw - 20) / img.width, (boxH - (sec.caption ? 28 : 16)) / img.height);
+    page.drawImage(img, { x: bx + bw / 2 - (img.width * sc) / 2, y: y - boxH / 2 - (img.height * sc) / 2 + (sec.caption ? 7 : 0), width: img.width * sc, height: img.height * sc });
+    y -= boxH + 10;
   };
 
   // images supplied as data URLs (e.g. pipe route from a drawing) are embedded here
@@ -215,6 +224,7 @@ export async function renderCalcSheet(doc, fonts, sheet, project = {}, logoImg =
     else if (sec.type === 'image') imageBox(sec);
     else if (sec.type === 'para') para(sec);
     else {
+      ensure(100); // keep a table title with its header and first rows
       sectionTitle(sec.title);
       table(sec);
     }
@@ -222,25 +232,26 @@ export async function renderCalcSheet(doc, fonts, sheet, project = {}, logoImg =
 
   // Signature block
   if (sheet.signatures !== false) {
-  const sigH = 46;
-  ensure(sigH + 4);
-  const colW = W / 3;
-  const sy = y - 4;
+  const sigH = 58;
+  ensure(sigH + 10);
+  const gap = 8;
+  const colW = (W - gap * 2) / 3;
+  const sy = y - 8;
   [
     ['PREPARED BY', project.preparedBy || ''],
     ['CHECKED BY', project.checkedBy || ''],
     ['APPROVED BY', project.approvedBy || ''],
   ].forEach(([role, name], k) => {
-    const x = L + k * colW;
+    const x = L + k * (colW + gap);
     rect(page, x, sy - sigH, colW, sigH, { stroke: C.navy, width: 0.7 });
-    rect(page, x, sy - 13, colW, 13, { fill: C.navy });
-    drawText(page, role, { x: x + colW / 2, y: sy - 9.3, size: 7.4, font: fonts.bold, color: C.white, align: 'center' });
-    [sy - 23, sy - 34, sy - 45 + 2].forEach((ry, j) => {
-      drawText(page, `${['Name', 'Signature', 'Date'][j]}:`, { x: x + 6, y: ry, size: 7, font: fonts.reg, color: C.muted });
-      hline(page, x + 46, x + colW - 8, ry - 2, C.border, 0.5);
+    rect(page, x, sy - 15, colW, 15, { fill: C.navy });
+    drawText(page, role, { x: x + colW / 2, y: sy - 10.6, size: 8.5, font: fonts.bold, color: C.white, align: 'center' });
+    [sy - 28, sy - 41, sy - 54].forEach((ry, j) => {
+      drawText(page, `${['Name', 'Signature', 'Date'][j]}:`, { x: x + 7, y: ry, size: 8.5, font: fonts.reg, color: C.muted });
+      hline(page, x + 52, x + colW - 8, ry - 2, C.border, 0.5);
     });
-    if (name) drawText(page, name, { x: x + 48, y: sy - 23, size: 7.6, font: fonts.bold, color: C.text, maxWidth: colW - 56 });
-    if (k === 0 && project.date) drawText(page, fmtDate(project.date), { x: x + 48, y: sy - 43, size: 7.6, font: fonts.reg, color: C.text });
+    if (name) drawText(page, name, { x: x + 54, y: sy - 28, size: 9, font: fonts.bold, color: C.text, maxWidth: colW - 62 });
+    if (k === 0 && project.date) drawText(page, fmtDate(project.date), { x: x + 54, y: sy - 54, size: 9, font: fonts.reg, color: C.text });
   });
 
   }
@@ -257,17 +268,17 @@ export async function renderCalcSheet(doc, fonts, sheet, project = {}, logoImg =
 
 function drawSheetHeader(page, fonts, sheet, project, n, total, logoImg) {
   const yTop = TOP;
-  const h1 = 40;
+  const h1 = HEAD_BOX;
   rect(page, L, yTop - h1, W, h1, { stroke: C.navy, width: 0.8 });
   const leftW = W * 0.36;
   vline(page, L + leftW, yTop, yTop - h1, C.navy, 0.8);
   if (logoImg) {
-    const sc = Math.min(24 / logoImg.height, (leftW - 16) / logoImg.width);
-    page.drawImage(logoImg, { x: L + 7, y: yTop - 4 - logoImg.height * sc, width: logoImg.width * sc, height: logoImg.height * sc });
+    const sc = Math.min(27 / logoImg.height, (leftW - 16) / logoImg.width);
+    page.drawImage(logoImg, { x: L + 8, y: yTop - 5 - logoImg.height * sc, width: logoImg.width * sc, height: logoImg.height * sc });
   } else {
-    drawText(page, project.supplier || 'Supplier', { x: L + 8, y: yTop - 18, size: 11, font: fonts.bold, color: C.navy, maxWidth: leftW - 14 });
+    drawText(page, project.supplier || 'Supplier', { x: L + 8, y: yTop - 20, size: 12.5, font: fonts.bold, color: C.navy, maxWidth: leftW - 14 });
   }
-  drawText(page, sheet.sheetLabel || 'HYDRAULIC CALCULATION SHEET', { x: L + 8, y: yTop - 35, size: 6.4, font: fonts.bold, color: C.blue });
+  drawText(page, sheet.sheetLabel || 'HYDRAULIC CALCULATION SHEET', { x: L + 8, y: yTop - h1 + 6, size: TYPE.small, font: fonts.bold, color: C.blue, maxWidth: leftW - 14 });
   const gx = L + leftW;
   const gw = W - leftW;
   const cells = [
@@ -281,18 +292,19 @@ function drawSheetHeader(page, fonts, sheet, project, n, total, logoImg) {
     if (r > 0) hline(page, gx, R, yy + rh, C.border, 0.5);
     const c1 = gw * 0.66;
     vline(page, gx + c1, yy, yy + rh, C.border, 0.5);
-    drawText(page, `${row[0]}:`, { x: gx + 5, y: yy + 4.3, size: 6.3, font: fonts.reg, color: C.muted });
-    drawText(page, row[1], { x: gx + 36, y: yy + 4.3, size: 7, font: fonts.bold, color: C.text, maxWidth: c1 - 40 });
-    drawText(page, `${row[2]}:`, { x: gx + c1 + 5, y: yy + 4.3, size: 6.3, font: fonts.reg, color: C.muted });
-    drawText(page, row[3], { x: gx + c1 + 38, y: yy + 4.3, size: 7, font: fonts.bold, color: C.text, maxWidth: gw - c1 - 42 });
+    if (r % 2 === 0) rect(page, gx + 0.4, yy + 0.3, gw - 0.8, rh - 0.6, { fill: C.light });
+    drawText(page, `${row[0]}:`, { x: gx + 6, y: yy + 5, size: TYPE.small, font: fonts.reg, color: C.muted });
+    drawText(page, row[1], { x: gx + 40, y: yy + 5, size: 8.8, font: fonts.bold, color: C.text, maxWidth: c1 - 44 });
+    drawText(page, `${row[2]}:`, { x: gx + c1 + 6, y: yy + 5, size: TYPE.small, font: fonts.reg, color: C.muted });
+    drawText(page, row[3], { x: gx + c1 + 40, y: yy + 5, size: 8.8, font: fonts.bold, color: C.text, maxWidth: gw - c1 - 44 });
   });
   const tb = yTop - h1;
-  rect(page, L, tb - 20, W, 20, { fill: C.sky });
-  drawText(page, sheet.docTitle || 'HYDRAULIC CALCULATION', { x: L + W / 2, y: tb - 13.5, size: 10, font: fonts.bold, color: C.white, align: 'center', maxWidth: W - 20 });
+  rect(page, L, tb - TITLE_BAR, W, TITLE_BAR, { fill: C.sky });
+  drawText(page, sheet.docTitle || 'HYDRAULIC CALCULATION', { x: L + W / 2, y: tb - 16, size: TYPE.docTitle, font: fonts.bold, color: C.white, align: 'center', maxWidth: W - 20 });
 
-  hline(page, L, R, 48, C.border, 0.5);
-  drawText(page, clean(`${project.supplier || ''}${project.refNo ? '  |  ' + project.refNo : ''}`), { x: L, y: 39, size: 6.6, font: fonts.reg, color: C.muted, maxWidth: W * 0.6 });
-  drawText(page, `${sheet.tag || ''} – Sheet ${n} of ${total}`, { x: R, y: 39, size: 6.6, font: fonts.bold, color: C.muted, align: 'right' });
+  hline(page, L, R, 52, C.border, 0.5);
+  drawText(page, clean([project.supplier, sheet.ref || project.refNo].filter(Boolean).join('  |  ')), { x: L, y: 42, size: TYPE.small, font: fonts.ital, color: C.muted, maxWidth: W * 0.6 });
+  drawText(page, `${sheet.tag && sheet.tag !== '–' ? sheet.tag + ' – ' : ''}Sheet ${n} of ${total}`, { x: R, y: 42, size: TYPE.small, font: fonts.bold, color: C.muted, align: 'right' });
 }
 
 export async function buildCalcSheetPdf(sheet, project, logo) {

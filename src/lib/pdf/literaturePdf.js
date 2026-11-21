@@ -49,7 +49,7 @@ export async function buildLiteraturePdf(lit, project, { logo, attachments = [] 
   const pages = doc.getPages();
   pages.forEach((p, i) => {
     const { width } = p.getSize();
-    drawText(p, `Page ${i + 1} of ${pages.length}`, { x: width / 2, y: 16, size: 7, font: fonts.reg, color: C.muted, align: 'center' });
+    drawText(p, `Page ${i + 1} of ${pages.length}`, { x: width / 2, y: 18, size: 8, font: fonts.reg, color: C.muted, align: 'center' });
   });
   return { bytes: await doc.save(), warnings };
 }

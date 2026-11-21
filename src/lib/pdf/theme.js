@@ -12,6 +12,7 @@ export const C = {
   sky: rgb(6 / 255, 175 / 255, 75 / 255),
   light: rgb(0.945, 0.96, 0.985),
   light2: rgb(0.9, 0.93, 0.97),
+  zebra: rgb(0.972, 0.979, 0.99),
   border: rgb(0.74, 0.79, 0.86),
   text: rgb(0.09, 0.11, 0.15),
   muted: rgb(0.38, 0.43, 0.5),
@@ -22,15 +23,31 @@ export const C = {
   redBg: rgb(0.99, 0.92, 0.92),
 };
 
-export async function loadFonts(doc) {
-  const [reg, bold, ital, boldItal] = await Promise.all([
-    doc.embedFont(StandardFonts.Helvetica),
-    doc.embedFont(StandardFonts.HelveticaBold),
-    doc.embedFont(StandardFonts.HelveticaOblique),
-    doc.embedFont(StandardFonts.HelveticaBoldOblique),
-  ]);
+/**
+ * Report fonts. Reports use Times (Times New Roman metrics); the submittal cover and
+ * table of contents keep Helvetica ('sans').
+ */
+export async function loadFonts(doc, family = 'serif') {
+  const set =
+    family === 'sans'
+      ? [StandardFonts.Helvetica, StandardFonts.HelveticaBold, StandardFonts.HelveticaOblique, StandardFonts.HelveticaBoldOblique]
+      : [StandardFonts.TimesRoman, StandardFonts.TimesRomanBold, StandardFonts.TimesRomanItalic, StandardFonts.TimesRomanBoldItalic];
+  const [reg, bold, ital, boldItal] = await Promise.all(set.map((f) => doc.embedFont(f)));
   return { reg, bold, ital, boldItal };
 }
+
+/** House type scale for reports (pt, Times). */
+export const TYPE = {
+  docTitle: 12.5, // title bar
+  section: 9.5, // section bars
+  body: 9.5, // paragraphs
+  table: 8.8, // table cells
+  tableDense: 8, // tables with many columns
+  head: 8.6, // table headings
+  note: 8.5, // notes / legends
+  small: 7.8, // header labels, captions
+  footer: 8,
+};
 
 // Standard 14 fonts use WinAnsi encoding – map engineering symbols that it lacks.
 const MAP = {
@@ -85,6 +102,14 @@ export function wrap(font, text, size, maxWidth) {
     lines.push(line);
   }
   return lines;
+}
+
+/** Wrap without splitting words: shrinks the size (by up to 2 pt) until the longest word fits. */
+export function fitWrap(font, text, size, width) {
+  const words = clean(text ?? '').split(/\s+/).filter(Boolean);
+  let s = size;
+  while (s > size - 2 && words.some((w) => font.widthOfTextAtSize(w, s) > width)) s -= 0.25;
+  return { lines: wrap(font, text ?? '', s, width), size: s };
 }
 
 export function truncate(font, text, size, maxWidth) {

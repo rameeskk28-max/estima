@@ -12,8 +12,8 @@ async function divider(doc, fonts, base, project, logoImg, title, lines = []) {
   const { pages } = await renderCalcSheet(doc, fonts, { ...base, sections: [], signatures: false }, project, logoImg);
   const page = pages[0];
   const [W, H] = A4;
-  drawText(page, title, { x: W / 2, y: H / 2 + 20, size: 30, font: fonts.bold, color: MAROON, align: 'center' });
-  lines.forEach((ln, i) => wrap(fonts.reg, ln, 11, W - 140).forEach((l, j) => drawText(page, l, { x: W / 2, y: H / 2 - 12 - i * 16 - j * 14, size: 11, font: fonts.reg, color: C.muted, align: 'center' })));
+  drawText(page, title, { x: W / 2, y: H / 2 + 20, size: 32, font: fonts.bold, color: MAROON, align: 'center' });
+  lines.forEach((ln, i) => wrap(fonts.reg, ln, 12.5, W - 140).forEach((l, j) => drawText(page, l, { x: W / 2, y: H / 2 - 14 - i * 18 - j * 15, size: 12.5, font: fonts.reg, color: C.muted, align: 'center' })));
   return page;
 }
 
@@ -65,8 +65,8 @@ export async function buildReplyPdf(reply, project, { logo, stamp, files = {}, o
   const foot = clean(`${(project.supplier || 'GREENLAND').split(' ')[0].toUpperCase()}  |  CONSULTANT RESPONSE  |  ${reply.marNo || ''} Rev. ${reply.rev || ''}`);
   pages.forEach((p, i) => {
     const { width } = p.getSize();
-    drawText(p, foot, { x: 24, y: 14, size: 6.8, font: fonts.reg, color: C.muted });
-    drawText(p, `Page ${i + 1} of ${pages.length}`, { x: width - 24, y: 14, size: 7.5, font: fonts.bold, color: C.navy, align: 'right' });
+    drawText(p, foot, { x: 40, y: 18, size: 8, font: fonts.ital, color: C.muted });
+    drawText(p, `Page ${i + 1} of ${pages.length}`, { x: width - 40, y: 18, size: 8.5, font: fonts.bold, color: C.navy, align: 'right' });
   });
   onProgress('Saving…');
   return { bytes: await doc.save(), warnings, pageCount: pages.length };

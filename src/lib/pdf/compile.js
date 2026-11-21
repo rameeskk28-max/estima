@@ -54,7 +54,8 @@ export function buildPlan(entries, duties, files, literature = [], opts = {}) {
  */
 export async function compileSubmittal({ project = {}, entries = [], duties = [], files = {}, logo, schedule, literature = [], warranty, librarySettings, compliance, stamp, cover }, onProgress = () => {}) {
   const doc = await PDFDocument.create();
-  const fonts = await loadFonts(doc);
+  const fonts = await loadFonts(doc); // reports: Times
+  const sans = await loadFonts(doc, 'sans'); // cover + contents keep Helvetica
   const warnings = [];
   doc.setTitle(clean(`${project.refNo || 'Submittal'} – ${project.projectName || ''}`));
   doc.setSubject(clean(project.subject || 'Technical Submittal'));
@@ -76,7 +77,7 @@ export async function compileSubmittal({ project = {}, entries = [], duties = []
   const track = (pages, section, footer = true) => pages.forEach((p) => pageMeta.push({ page: p, section, footer }));
 
   onProgress('Generating cover page…');
-  const coverPage = drawCover(doc, fonts, project, logoImg, cover);
+  const coverPage = drawCover(doc, sans, project, logoImg, cover);
   track([coverPage], '', false);
 
   // Reserve TOC pages
@@ -88,6 +89,7 @@ export async function compileSubmittal({ project = {}, entries = [], duties = []
   const tocLayout = layoutToc(tocRows);
   const tocPages = tocLayout.map(() => doc.addPage(A4));
   track(tocPages, 'TABLE OF CONTENTS');
+  const tocSet = new Set(tocPages);
 
   // Sections
   for (const s of plan) {
@@ -124,7 +126,7 @@ export async function compileSubmittal({ project = {}, entries = [], duties = []
   }
 
   onProgress('Writing table of contents…');
-  drawToc(tocPages, fonts, project, tocLayout);
+  drawToc(tocPages, sans, project, tocLayout);
 
   // Global footer / page numbering
   const total = doc.getPageCount();
@@ -132,11 +134,21 @@ export async function compileSubmittal({ project = {}, entries = [], duties = []
     if (!m.footer) return;
     const { width } = m.page.getSize();
     const page = m.page;
-    hline(page, 28, width - 28, 28, C.navy, 0.8);
-    drawText(page, `${project.projectName || ''}`, { x: 28, y: 16, size: 7, font: fonts.bold, color: C.navy, maxWidth: width * 0.36 });
-    drawText(page, `${project.refNo || ''}  Rev. ${project.revision || '0'}`, { x: 28, y: 7.5, size: 6.5, font: fonts.reg, color: C.muted, maxWidth: width * 0.36 });
-    drawText(page, m.section, { x: width / 2, y: 12, size: 7, font: fonts.reg, color: C.muted, align: 'center', maxWidth: width * 0.34 });
-    drawText(page, `Page ${i + 1} of ${total}`, { x: width - 28, y: 12, size: 8, font: fonts.bold, color: C.navy, align: 'right' });
+    if (tocSet.has(page)) {
+      // contents pages: unchanged Helvetica footer
+      hline(page, 28, width - 28, 28, C.navy, 0.8);
+      drawText(page, `${project.projectName || ''}`, { x: 28, y: 16, size: 7, font: sans.bold, color: C.navy, maxWidth: width * 0.36 });
+      drawText(page, `${project.refNo || ''}  Rev. ${project.revision || '0'}`, { x: 28, y: 7.5, size: 6.5, font: sans.reg, color: C.muted, maxWidth: width * 0.36 });
+      drawText(page, m.section, { x: width / 2, y: 12, size: 7, font: sans.reg, color: C.muted, align: 'center', maxWidth: width * 0.34 });
+      drawText(page, `Page ${i + 1} of ${total}`, { x: width - 28, y: 12, size: 8, font: sans.bold, color: C.navy, align: 'right' });
+      return;
+    }
+    const fx = width > 600 ? 28 : 40; // align with the report margins (landscape 28, portrait 40)
+    hline(page, fx, width - fx, 29, C.navy, 0.8);
+    drawText(page, `${project.projectName || ''}`, { x: fx, y: 18, size: 8, font: fonts.bold, color: C.navy, maxWidth: width * 0.34 });
+    drawText(page, `${project.refNo || ''}  Rev. ${project.revision || '0'}`, { x: fx, y: 8.5, size: 7.5, font: fonts.reg, color: C.muted, maxWidth: width * 0.34 });
+    drawText(page, m.section, { x: width / 2, y: 13, size: 8, font: fonts.ital, color: C.muted, align: 'center', maxWidth: width * 0.32 });
+    drawText(page, `Page ${i + 1} of ${total}`, { x: width - fx, y: 13, size: 9, font: fonts.bold, color: C.navy, align: 'right' });
   });
 
   onProgress('Saving PDF…');
@@ -329,36 +341,36 @@ function drawDivider(doc, fonts, p, s, logoImg) {
     drawText(page, p.refNo || '', { x: R, y: H - 63, size: 8, font: fonts.reg, color: C.muted, align: 'right' });
   }
 
-  drawText(page, 'SECTION', { x: L, y: H * 0.62 + 70, size: 14, font: fonts.bold, color: C.blue });
+  drawText(page, 'SECTION', { x: L, y: H * 0.62 + 70, size: 16, font: fonts.bold, color: C.blue });
   drawText(page, pad2(s.number), { x: L - 4, y: H * 0.62 - 20, size: 96, font: fonts.bold, color: C.navy });
   hline(page, L, R, H * 0.62 - 42, C.sky, 3);
   const lines = wrap(fonts.bold, s.entry.title, 24, R - L);
   let y = H * 0.62 - 76;
   lines.forEach((ln) => {
-    drawText(page, ln, { x: L, y, size: 24, font: fonts.bold, color: C.navy });
+    drawText(page, ln, { x: L, y, size: 26, font: fonts.bold, color: C.navy });
     y -= 30;
   });
   if (s.entry.kind === 'technical' && s.entry.category) {
-    drawText(page, `Equipment category: ${SECTION_CATEGORIES[s.entry.category] || s.entry.category}`, { x: L, y: y - 2, size: 10, font: fonts.reg, color: C.muted });
+    drawText(page, `Equipment category: ${SECTION_CATEGORIES[s.entry.category] || s.entry.category}`, { x: L, y: y - 2, size: 11.5, font: fonts.ital, color: C.muted });
     y -= 20;
   }
   y -= 16;
-  drawText(page, 'CONTENTS OF THIS SECTION', { x: L, y, size: 8.5, font: fonts.bold, color: C.blue });
+  drawText(page, 'CONTENTS OF THIS SECTION', { x: L, y, size: 10, font: fonts.bold, color: C.blue });
   y -= 6;
   hline(page, L, R, y, C.border, 0.6);
   y -= 16;
   if (!s.items.length) {
-    drawText(page, 'No document attached to this section.', { x: L, y, size: 10, font: fonts.ital, color: C.red });
+    drawText(page, 'No document attached to this section.', { x: L, y, size: 11, font: fonts.ital, color: C.red });
   }
   s.items.slice(0, 18).forEach((it, i) => {
-    drawText(page, `${s.number}.${i + 1}`, { x: L, y, size: 9.5, font: fonts.bold, color: C.blue });
-    drawText(page, it.label, { x: L + 36, y, size: 9.5, font: fonts.reg, color: C.text, maxWidth: R - L - 40 });
+    drawText(page, `${s.number}.${i + 1}`, { x: L, y, size: 11, font: fonts.bold, color: C.blue });
+    drawText(page, it.label, { x: L + 40, y, size: 11, font: fonts.reg, color: C.text, maxWidth: R - L - 40 });
     y -= 17;
   });
-  if (s.items.length > 18) drawText(page, `+ ${s.items.length - 18} more document(s)`, { x: L + 36, y, size: 9, font: fonts.ital, color: C.muted });
+  if (s.items.length > 18) drawText(page, `+ ${s.items.length - 18} more document(s)`, { x: L + 40, y, size: 10.5, font: fonts.ital, color: C.muted });
 
-  drawText(page, p.projectName || '', { x: L, y: 70, size: 10, font: fonts.bold, color: C.navy, maxWidth: R - L });
-  drawText(page, [p.consultant, p.contractor].filter(Boolean).join('  |  '), { x: L, y: 56, size: 8.5, font: fonts.reg, color: C.muted, maxWidth: R - L });
+  drawText(page, p.projectName || '', { x: L, y: 70, size: 11.5, font: fonts.bold, color: C.navy, maxWidth: R - L });
+  drawText(page, [p.consultant, p.contractor].filter(Boolean).join('  |  '), { x: L, y: 55, size: 9.5, font: fonts.reg, color: C.muted, maxWidth: R - L });
   return page;
 }
 
@@ -374,8 +386,8 @@ function drawSchedule(doc, fonts, p, duties) {
   const pumps = duties.filter((d) => d.kind !== 'vessel');
   const vessels = duties.filter((d) => d.kind === 'vessel');
   const [W, H] = A4L;
-  const L = 30;
-  const R = W - 30;
+  const L = 28;
+  const R = W - 28;
   const pages = [];
   let page;
   let y;
@@ -383,9 +395,9 @@ function drawSchedule(doc, fonts, p, duties) {
     page = doc.addPage(A4L);
     pages.push(page);
     rect(page, L, H - 62, R - L, 34, { fill: C.navy });
-    drawText(page, `PUMP & EQUIPMENT SCHEDULE${cont ? ' (cont.)' : ''}`, { x: L + 12, y: H - 50, size: 14, font: fonts.bold, color: C.white });
-    drawText(page, p.projectName || '', { x: R - 12, y: H - 43, size: 8.5, font: fonts.bold, color: C.sky, align: 'right', maxWidth: 360 });
-    drawText(page, `${p.refNo || ''}  ·  Rev. ${p.revision || '0'}  ·  ${fmtDate(p.date)}`, { x: R - 12, y: H - 55, size: 7.5, font: fonts.reg, color: C.white, align: 'right' });
+    drawText(page, `PUMP & EQUIPMENT SCHEDULE${cont ? ' (cont.)' : ''}`, { x: L + 12, y: H - 50, size: 15, font: fonts.bold, color: C.white });
+    drawText(page, p.projectName || '', { x: R - 12, y: H - 43, size: 9.5, font: fonts.bold, color: C.sky, align: 'right', maxWidth: 360 });
+    drawText(page, `${p.refNo || ''}  ·  Rev. ${p.revision || '0'}  ·  ${fmtDate(p.date)}`, { x: R - 12, y: H - 56, size: 8.5, font: fonts.reg, color: C.white, align: 'right' });
     y = H - 78;
   };
   header(false);
@@ -393,16 +405,16 @@ function drawSchedule(doc, fonts, p, duties) {
   const table = (title, cols, rows) => {
     const tw = R - L;
     const widths = cols.map((c) => c.w * tw);
-    const size = 7.8;
+    const size = 8.8;
     const drawHead = () => {
-      drawText(page, title, { x: L, y: y - 10, size: 9, font: fonts.bold, color: C.navy });
+      drawText(page, title, { x: L, y: y - 10, size: 10.5, font: fonts.bold, color: C.navy });
       y -= 16;
       const h = 26;
       rect(page, L, y - h, tw, h, { fill: C.navy2 });
       let x = L;
       cols.forEach((c, k) => {
-        const lines = wrap(fonts.bold, c.label, 7, widths[k] - 6);
-        lines.slice(0, 2).forEach((ln, li) => drawText(page, ln, { x: x + widths[k] / 2, y: y - 10 - li * 8.5 + (lines.length === 1 ? -4 : 0), size: 7, font: fonts.bold, color: C.white, align: 'center' }));
+        const lines = wrap(fonts.bold, c.label, 8, widths[k] - 6);
+        lines.slice(0, 2).forEach((ln, li) => drawText(page, ln, { x: x + widths[k] / 2, y: y - 10.5 - li * 9 + (lines.length === 1 ? -4.5 : 0), size: 8, font: fonts.bold, color: C.white, align: 'center' }));
         x += widths[k];
       });
       y -= h;
@@ -410,13 +422,13 @@ function drawSchedule(doc, fonts, p, duties) {
     drawHead();
     if (!rows.length) {
       rect(page, L, y - 22, tw, 22, { stroke: C.border, width: 0.5 });
-      drawText(page, 'No duties saved – use the calculators and press "Save to Pump Schedule".', { x: L + tw / 2, y: y - 14, size: 8, font: fonts.ital, color: C.muted, align: 'center' });
+      drawText(page, 'No duties saved – use the calculators and press "Save to Pump Schedule".', { x: L + tw / 2, y: y - 14, size: 9.5, font: fonts.ital, color: C.muted, align: 'center' });
       y -= 30;
       return;
     }
     rows.forEach((row, ri) => {
       const cells = row.map((cell, k) => wrap(k === 1 ? fonts.bold : fonts.reg, cell, size, widths[k] - 6));
-      const h = Math.max(...cells.map((c) => c.length)) * 10 + 8;
+      const h = Math.max(...cells.map((c) => c.length)) * 11 + 9;
       if (y - h < 50) {
         header(true);
         drawHead();
@@ -424,7 +436,7 @@ function drawSchedule(doc, fonts, p, duties) {
       if (ri % 2) rect(page, L, y - h, tw, h, { fill: C.light });
       let x = L;
       cells.forEach((lines, k) => {
-        lines.forEach((ln, li) => drawText(page, ln, { x: cols[k].align === 'left' ? x + 4 : x + widths[k] / 2, y: y - 11 - li * 10, size, font: k === 1 ? fonts.bold : fonts.reg, color: C.text, align: cols[k].align === 'left' ? 'left' : 'center' }));
+        lines.forEach((ln, li) => drawText(page, ln, { x: cols[k].align === 'left' ? x + 4 : x + widths[k] / 2, y: y - 12 - li * 11, size, font: k === 1 ? fonts.bold : fonts.reg, color: C.text, align: cols[k].align === 'left' ? 'left' : 'center' }));
         page.drawLine({ start: { x, y }, end: { x, y: y - h }, color: C.border, thickness: 0.4 });
         x += widths[k];
       });
@@ -466,7 +478,7 @@ function drawSchedule(doc, fonts, p, duties) {
       vessels.map((d, i) => [String(i + 1), d.tag, d.service, d.arrangement, d.remarks || '']),
     );
   }
-  if (y > 70) drawText(page, 'Duty points per pump at design conditions. Motor ratings are recommended IEC standard frame sizes. Refer to individual calculation sheets for design basis.', { x: L, y: Math.max(y, 56), size: 7, font: fonts.ital, color: C.muted, maxWidth: R - L });
+  if (y > 70) drawText(page, 'Duty points per pump at design conditions. Motor ratings are recommended IEC standard frame sizes. Refer to individual calculation sheets for design basis.', { x: L, y: Math.max(y, 56), size: 8.5, font: fonts.ital, color: C.muted, maxWidth: R - L });
   return pages;
 }
 

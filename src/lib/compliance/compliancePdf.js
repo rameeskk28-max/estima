@@ -5,8 +5,8 @@ import { STATUS } from './spec.js';
 
 const A4 = [595.28, 841.89];
 const [PW, PH] = A4;
-const L = 36;
-const R = PW - 36;
+const L = 40;
+const R = PW - 40;
 const W = R - L;
 const DARK = rgb(0.12, 0.33, 0.19); // table header
 const GREEN = rgb(0.17, 0.48, 0.24); // part bars / labels
@@ -70,15 +70,15 @@ export async function renderCompliance(doc, cs, project = {}, { logoImg, stampIm
       page.drawImage(logoImg, { x: L, y: PH - 30 - logoImg.height * sc, width: logoImg.width * sc, height: logoImg.height * sc });
       hline(page, L + logoImg.width * sc + 16, R, PH - 30 - (logoImg.height * sc) / 2 - 6, GREEN, 0.8);
     }
-    txt(page, footer, { x: PW / 2, y: 38, size: 6.6, font: f.ital, color: GREY, align: 'center' });
+    txt(page, footer, { x: PW / 2, y: 38, size: 7.6, font: f.ital, color: GREY, align: 'center' });
     y = PH - 92;
   };
   const tableHead = () => {
-    const h = 20;
+    const h = 21;
     rect(page, L, y - h, W, h, { fill: DARK });
     let x = L;
     COLS.forEach((c, k) => {
-      txt(page, c.label, { x: c.c ? x + widths[k] / 2 : x + 5, y: y - 13.5, size: 8.6, font: f.bold, color: rgb(1, 1, 1), align: c.c ? 'center' : 'left' });
+      txt(page, c.label, { x: c.c ? x + widths[k] / 2 : x + 5, y: y - 14, size: 9.2, font: f.bold, color: rgb(1, 1, 1), align: c.c ? 'center' : 'left' });
       x += widths[k];
     });
     y -= h;
@@ -95,12 +95,12 @@ export async function renderCompliance(doc, cs, project = {}, { logoImg, stampIm
   newPage();
   // Title block
   y -= 4;
-  txt(page, 'TECHNICAL COMPLIANCE STATEMENT', { x: PW / 2, y, size: 17, font: f.bold, color: NAVY, align: 'center' });
-  y -= 18;
+  txt(page, 'TECHNICAL COMPLIANCE STATEMENT', { x: PW / 2, y, size: 18, font: f.bold, color: NAVY, align: 'center' });
+  y -= 19;
   const sub = cs.subtitle || `Specification Section ${cs.specNo || ''} (${title(cs.specName)}) vs. Offered ${title(cs.brandOffered || 'Franklin Electric')} Pump Sets`;
-  wrap(f.ital, sub, 9.5, W).forEach((ln) => {
-    txt(page, ln, { x: PW / 2, y, size: 9.5, font: f.ital, color: GREY, align: 'center' });
-    y -= 12;
+  wrap(f.ital, sub, 10.5, W).forEach((ln) => {
+    txt(page, ln, { x: PW / 2, y, size: 10.5, font: f.ital, color: GREY, align: 'center' });
+    y -= 13;
   });
   y -= 10;
   // Project table
@@ -115,12 +115,12 @@ export async function renderCompliance(doc, cs, project = {}, { logoImg, stampIm
   const lw = W * 0.26;
   const tw = W * 0.93;
   info.forEach(([k, v]) => {
-    const lines = wrap(f.bold, v || '–', 9.2, tw - lw - 12);
-    const h = Math.max(20, lines.length * 11.5 + 8);
+    const lines = wrap(f.bold, v || '–', 10, tw - lw - 12);
+    const h = Math.max(21, lines.length * 12.5 + 8);
     rect(page, L, y - h, lw, h, { fill: GREEN, stroke: INK, width: 0.6 });
     rect(page, L + lw, y - h, tw - lw, h, { stroke: INK, width: 0.6 });
-    txt(page, k, { x: L + 6, y: y - h / 2 - 3, size: 9, font: f.bold, color: rgb(1, 1, 1) });
-    lines.forEach((ln, i) => txt(page, ln, { x: L + lw + 6, y: y - h / 2 + ((lines.length - 1) * 11.5) / 2 - 3 - i * 11.5, size: 9.2, font: f.bold, color: NAVY }));
+    txt(page, k, { x: L + 6, y: y - h / 2 - 3, size: 9.6, font: f.bold, color: rgb(1, 1, 1) });
+    lines.forEach((ln, i) => txt(page, ln, { x: L + lw + 6, y: y - h / 2 + ((lines.length - 1) * 12.5) / 2 - 3.3 - i * 12.5, size: 10, font: f.bold, color: NAVY }));
     y -= h;
   });
   y -= 22;
@@ -132,9 +132,9 @@ export async function renderCompliance(doc, cs, project = {}, { logoImg, stampIm
   const bar = (label) => {
     if (!lastWasBar) y -= 12;
     if (y - 90 < BOTTOM) newPage();
-    rect(page, L, y - 16, W, 16, { fill: GREEN });
-    txt(page, label.toUpperCase(), { x: L + 8, y: y - 11.8, size: 9.6, font: f.bold, color: rgb(1, 1, 1) });
-    y -= 22;
+    rect(page, L, y - 18, W, 18, { fill: GREEN });
+    txt(page, label.toUpperCase(), { x: L + 8, y: y - 12.8, size: 10, font: f.bold, color: rgb(1, 1, 1) });
+    y -= 24;
     needHead = true;
     headed = true;
     lastWasBar = true;
@@ -158,8 +158,8 @@ export async function renderCompliance(doc, cs, project = {}, { logoImg, stampIm
     lastWasBar = false;
     const st = STATUS[r.status];
     const tone = st ? TONE[st.color] : null;
-    const size = 8.4;
-    const lh = 10.4;
+    const size = 9.3;
+    const lh = 11.6;
     const cells = [
       wrap(f.bold, r.clause || '', size, widths[0] - 8),
       wrap(f.reg, r.text || '', size, widths[1] - 8),
@@ -212,32 +212,32 @@ export async function renderCompliance(doc, cs, project = {}, { logoImg, stampIm
   if (keys.length) {
     y -= 16;
     ensure(40, false);
-    txt(page, "Key items for Consultant's attention:", { x: L, y, size: 10.5, font: f.bold, color: rgb(0.72, 0.1, 0.12) });
-    y -= 15;
+    txt(page, "Key items for Consultant's attention:", { x: L, y, size: 11, font: f.bold, color: rgb(0.72, 0.1, 0.12) });
+    y -= 16;
     keys.forEach((k) => {
-      const lines = wrap(f.reg, k, 9.2, W - 30);
-      ensure(lines.length * 12 + 4, false);
-      page.drawCircle({ x: L + 12, y: y + 3, size: 2, color: INK });
-      lines.forEach((ln, i) => txt(page, ln, { x: L + 24, y: y - i * 12, size: 9.2, font: f.reg }));
-      y -= lines.length * 12 + 4;
+      const lines = wrap(f.reg, k, 10, W - 30);
+      ensure(lines.length * 13 + 4, false);
+      page.drawCircle({ x: L + 12, y: y + 3.3, size: 2, color: INK });
+      lines.forEach((ln, i) => txt(page, ln, { x: L + 24, y: y - i * 13, size: 10, font: f.reg }));
+      y -= lines.length * 13 + 5;
     });
   }
 
   // Signatory
   y -= 22;
   ensure(110, false);
-  txt(page, cs.signFor || 'For: GREENLAND EQUIPMENT & MACHINERY EST. L.L.C', { x: L, y, size: 10.5, font: f.bold });
+  txt(page, cs.signFor || 'For: GREENLAND EQUIPMENT & MACHINERY EST. L.L.C', { x: L, y, size: 11, font: f.bold });
   y -= 40;
   if (cs.signName) {
-    txt(page, cs.signName, { x: L, y, size: 10, font: f.bold });
-    y -= 13;
+    txt(page, cs.signName, { x: L, y, size: 10.5, font: f.bold });
+    y -= 14;
   }
   String(cs.signLines || '')
     .split('\n')
     .filter(Boolean)
     .forEach((ln) => {
-      txt(page, ln, { x: L, y, size: 9.4, font: f.reg });
-      y -= 12;
+      txt(page, ln, { x: L, y, size: 10, font: f.reg });
+      y -= 13;
     });
   if (stampImg && cs.showStamp !== false) {
     const sc = Math.min(120 / stampImg.width, 120 / stampImg.height);
@@ -265,7 +265,7 @@ export async function buildCompliancePdf(cs, project, { logo, stamp } = {}) {
     }
   };
   const pages = await renderCompliance(doc, cs, project, { logoImg: await emb(logo), stampImg: await emb(stamp) });
-  const fnt = await doc.embedFont(StandardFonts.Helvetica);
-  pages.forEach((p, i) => p.drawText(`Page ${i + 1} of ${pages.length}`, { x: R - 50, y: 22, size: 7, font: fnt, color: GREY }));
+  const fnt = await doc.embedFont(StandardFonts.TimesRoman);
+  pages.forEach((p, i) => txt(p, `Page ${i + 1} of ${pages.length}`, { x: R, y: 22, size: 8, font: fnt, color: GREY, align: 'right' }));
   return doc.save();
 }

@@ -76,6 +76,12 @@ Only `lib-*`/`libm-*` slots sync to the cloud.
 
 ## PDF conventions
 - Standard fonts only → sanitize text with `clean()` (WinAnsi); A4 everywhere.
+- Report typography (owner, Nov 2026): **Times** for all reports (`loadFonts(doc)` default 'serif'); the submittal
+  **cover and table of contents keep Helvetica** (`loadFonts(doc, 'sans')` in `compile.js`) – owner is happy with them.
+  Type scale `TYPE` in `theme.js` (title bar 12.5, section bars 9.5, body 9.5, table 8.8 / 8 dense, headings 8.6,
+  notes 8.5, small 7.8, footer 8). Calc sheets: 14 mm side margins (L = 40 pt), zebra rows, `fitWrap` shrinks a cell
+  (max −2 pt) instead of splitting words. Schedule landscape margins 28 pt. HTML preview (`.a4` in `index.css`,
+  `SheetPreview.jsx`) mirrors these sizes.
 - Calc-sheet sections: `info`, `steps`, `grid`, `result`, `note`, `image`, `para`; sheet options
   `sheetLabel`, `ref/rev/date`, `signatures:false`, `watermark`, row `tone` colours.
 - Compliance statement follows Greenland's existing TCS layout (logo header, project table, green
@@ -107,3 +113,4 @@ workflow (Drawings: multi-file upload + auto type riser/plans/ignore · Building
 floor · Review: editable calculator inputs in `drawing.review`, Save to Submittal via `saveDuty(key, result, inputs)`) → transfer/sump from drawings (own routes `calc/drawing-transfer|sump`,
 tank/pit notes via `findTanks`, main via `mainRoute`, plan route optional) → Order Processing folder → datasheet reader (`src/lib/datasheet.js`, Spaix layout: Pump type, MOTOR, Rated power, Electric
 current; no item code on Spaix sheets) filling costing + item-code rows.
+→ report typography overhaul (Times, larger type scale, 14 mm margins; cover/contents unchanged).
